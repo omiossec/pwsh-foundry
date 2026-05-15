@@ -7,7 +7,7 @@ function Invoke-FoundryApiRequest {
         [Parameter()]
         [string]$FoundryHost = 'http://localhost',
 
-        [Parameter(Mandatory)]
+        [Parameter()]
         [ValidateRange(1, 65535)]
         [int]$Port,
 
@@ -18,7 +18,7 @@ function Invoke-FoundryApiRequest {
         [Parameter()]
         [hashtable]$Headers,
 
-        [Parameter(Mandatory)]
+        [Parameter()]
         [object]$Body,
 
         [Parameter(Mandatory)]
@@ -26,14 +26,21 @@ function Invoke-FoundryApiRequest {
         [string]$Method
     )
 
+    if (-not $PSBoundParameters.ContainsKey('Port')) {
+        $Port = Get-FoundryServicePort
+    }
+
     $uri = '{0}:{1}{2}' -f $FoundryHost.TrimEnd('/'), $Port, $Path
     Write-Debug "Foundry API $Method $uri"
 
     $invokeParams = @{
         Uri         = $uri
         Method      = $Method
-        ContentType = 'application/json'
-        Body        = $Body | ConvertTo-Json -Depth 10 -Compress
+    }
+
+    if ($PSBoundParameters.ContainsKey('Body')) {
+        $invokeParams['Body'] = $Body | ConvertTo-Json -Depth 10 -Compress
+        $invokeParams['ContentType'] = 'application/json'
     }
 
     if ($Headers) {
