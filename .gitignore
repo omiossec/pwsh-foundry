@@ -55,3 +55,11 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# PowerShell / Pester
+build/output/
+*.nupkg
+TestResults.xml
+
+# Claude Code
+.claude/settings.local.json
