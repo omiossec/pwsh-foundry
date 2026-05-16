@@ -21,13 +21,13 @@ ModuleVersion = '0.1.0'
 GUID = 'be71974f-e8ac-4e81-ba14-590d99258a85'
 
 # Author of this module
-Author = 'omiossec'
+Author = 'Olivier Miossec'
 
 # Company or vendor of this module
-CompanyName = 'Unknown'
+CompanyName = 'Olivier Miossec'
 
 # Copyright statement for this module
-Copyright = '(c) omiossec. All rights reserved.'
+Copyright = '(c) Olivier Miossec. All rights reserved.'
 
 # Description of the functionality provided by this module
 Description = 'PowerShell module to interact with Azure AI Foundry local CLI and SDK'
@@ -72,7 +72,9 @@ PowerShellVersion = '7.4'
 FunctionsToExport = @(
     'Get-FoundryVersion',
     'Get-FoundryModelCache',
-    'Get-FoundryModelList'
+    'Get-FoundryModelList',
+    'New-FoundryChat',
+    'New-FoundryMessage'
 )
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
