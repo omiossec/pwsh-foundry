@@ -24,18 +24,18 @@ function Get-FoundryServicePort {
         }
     }
 
-    foreach ($line in @($status)) {
-        if ($line -match 'http://localhost:(\d+)') {
-            return [int]$Matches[1]
-        }
+    $port = ([regex]'(?<=:)\d+(?=/)').Match($status).Value
+
+    if (-not $port) {
+        $PSCmdlet.ThrowTerminatingError(
+            [System.Management.Automation.ErrorRecord]::new(
+                [System.Exception]::new('Could not determine Foundry service port from status output.'),
+                'FoundryServicePortNotFound',
+            [System.Management.Automation.ErrorCategory]::ResourceUnavailable,
+                $null
+            )
+        )
     }
 
-    $PSCmdlet.ThrowTerminatingError(
-        [System.Management.Automation.ErrorRecord]::new(
-            [System.Exception]::new('Could not determine Foundry service port from status output.'),
-            'FoundryServicePortNotFound',
-            [System.Management.Automation.ErrorCategory]::ResourceUnavailable,
-            $null
-        )
-    )
+    return [int]$port
 }

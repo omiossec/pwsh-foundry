@@ -16,9 +16,12 @@ function Get-FoundryModelCache {
 
     $response = Invoke-FoundryApiRequest -Path '/openai/models' -Method GET
 
-    if (-not $response -or -not $response.data) {
+    Write-Verbose $response.getType() 
+    Write-Verbose ($response | ConvertTo-Json -Depth 10)
+
+    if (-not $response ) {
         return @()
     }
 
-    return @($response.data)
+    return @($response)
 }
