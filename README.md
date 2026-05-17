@@ -123,7 +123,7 @@ Sends a chat completion request to the local Foundry service and returns a mappe
 
 ```powershell
 $msg    = New-FoundryMessage -UserPrompt 'Write a haiku about PowerShell'
-$result = New-FoundryChat -Message $msg -Model 'phi-3-mini'
+$result = New-FoundryChat -Message $msg -Model 'phi-3-mini-128k-instruct-qnn-npu:3'
 
 $result.message.content   # assistant reply text
 $result.model             # model that handled the request
@@ -133,7 +133,7 @@ $result.id                # completion ID
 | Parameter | Type | Required | Constraints | Description |
 |---|---|---|---|---|
 | `Message` | `FoundryMessage` | Yes | — | Message object from `New-FoundryMessage`. |
-| `Model` | `string` | Yes | — | Model alias (e.g. `phi-3-mini`). |
+| `Model` | `string` | Yes | — | Model Name (e.g. `phi-3-mini-128k-instruct-qnn-npu:3`). |
 | `Temperature` | `double` | No | 0.0 – 2.0 | Sampling temperature. |
 | `MaxTokens` | `int` | No | 1 – 2048 | Maximum tokens to generate. |
 | `TopP` | `double` | No | 0.0 – 1.0 | Nucleus sampling threshold. |
