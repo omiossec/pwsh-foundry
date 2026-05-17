@@ -71,6 +71,8 @@ function New-FoundryChat {
         $body.frequency_penalty = $FrequencyPenalty
     }
 
+    Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
+
     $chat = Invoke-FoundryApiRequest -Path '/v1/chat/completions' -Method POST -Body $body
 
     return [PSCustomObject]@{

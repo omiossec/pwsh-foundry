@@ -56,7 +56,7 @@ Get-FoundryModelCache
 
 # Send a chat request
 $msg    = New-FoundryMessage -UserPrompt 'Explain quantum computing in plain English'
-$result = New-FoundryChat -Message $msg -Model 'phi-3-mini'
+$result = New-FoundryChat -Message $msg -Model 'phi-3-mini-128k-instruct-qnn-npu:3'
 $result.message.content
 ```
 
