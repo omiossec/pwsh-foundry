@@ -133,7 +133,7 @@ $result.id                # completion ID
 | Parameter | Type | Required | Constraints | Description |
 |---|---|---|---|---|
 | `Message` | `FoundryMessage` | Yes | — | Message object from `New-FoundryMessage`. |
-| `Model` | `string` | Yes | — | Model Name (e.g. `phi-3-mini-128k-instruct-qnn-npu:3`). |
+| `Model` | `string` | Yes | — | Model ID (e.g. `phi-3-mini-128k-instruct-qnn-npu:3`). Check `Get-FoundryModelList`  |
 | `Temperature` | `double` | No | 0.0 – 2.0 | Sampling temperature. |
 | `MaxTokens` | `int` | No | 1 – 2048 | Maximum tokens to generate. |
 | `TopP` | `double` | No | 0.0 – 1.0 | Nucleus sampling threshold. |
