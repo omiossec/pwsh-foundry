@@ -44,6 +44,19 @@ function New-FoundryChat {
         [string] $User = 'pwshChat'
     )
 
+    if (-not (Test-FoundryModelName -ModelName $Model)) {
+        $PSCmdlet.ThrowTerminatingError(
+            [System.Management.Automation.ErrorRecord]::new(
+                [System.ArgumentException]::new(
+                    "Model '$Model' does not exist in the local Foundry. Use Get-FoundryModelList or 'foundry model list' to get a valid model id."
+                ),
+                'FoundryModelNotFound',
+                [System.Management.Automation.ErrorCategory]::InvalidArgument,
+                $Model
+            )
+        )
+    }
+
     $body = @{
         model    = $Model
         messages = $Message.GetMessages()
