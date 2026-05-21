@@ -41,7 +41,10 @@ function New-FoundryChat {
         [double] $FrequencyPenalty,
 
         [Parameter()]
-        [string] $User = 'pwshChat'
+        [string] $User = 'pwshChat',
+
+        [Parameter()]
+        [switch] $CountTokenOnly
     )
 
     if (-not (Test-FoundryModelName -ModelName $Model)) {
@@ -57,42 +60,59 @@ function New-FoundryChat {
         )
     }
 
-    $body = @{
-        model    = $Model
-        messages = $Message.GetMessages()
-        user     = $User
+    if ($CountTokenOnly) {
+        # NOTE: This endpoint is not yet implemented in Foundry Local and currently returns HTTP 404.
+        $body = @{
+            model    = $Model
+            messages = $Message.GetMessages()
+        }
+
+        Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
+
+        return Invoke-FoundryApiRequest -Path '/v1/chat/completions/tokenizer/encode/count' -Method POST -Body $body
+    }
+    else {
+
+        $body = @{
+            model    = $Model
+            messages = $Message.GetMessages()
+            user     = $User
+        }
+
+        if ($PSBoundParameters.ContainsKey('Temperature')) {
+            $body.temperature = $Temperature
+        }
+
+        if ($PSBoundParameters.ContainsKey('MaxTokens')) {
+            $body.max_tokens = $MaxTokens
+            $body.max_completion_tokens = $MaxTokens
+        }
+
+        if ($PSBoundParameters.ContainsKey('TopP')) {
+            $body.top_p = $TopP
+        }
+
+        if ($PSBoundParameters.ContainsKey('PresencePenalty')) {
+            $body.presence_penalty = $PresencePenalty
+        }
+
+        if ($PSBoundParameters.ContainsKey('FrequencyPenalty')) {
+            $body.frequency_penalty = $FrequencyPenalty
+        }
+
+        Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
+
+        $chat = Invoke-FoundryApiRequest -Path '/v1/chat/completions' -Method POST -Body $body
+
+        return [PSCustomObject]@{
+            id         = $chat.id
+            object     = $chat.object
+            model      = $chat.model
+            message    = $chat.choices[0].message
+            successful = $chat.successful
+        }
+
     }
 
-    if ($PSBoundParameters.ContainsKey('Temperature')) {
-        $body.temperature = $Temperature
-    }
 
-    if ($PSBoundParameters.ContainsKey('MaxTokens')) {
-        $body.max_tokens = $MaxTokens
-        $body.max_completion_tokens = $MaxTokens
-    }
-
-    if ($PSBoundParameters.ContainsKey('TopP')) {
-        $body.top_p = $TopP
-    }
-
-    if ($PSBoundParameters.ContainsKey('PresencePenalty')) {
-        $body.presence_penalty = $PresencePenalty
-    }
-
-    if ($PSBoundParameters.ContainsKey('FrequencyPenalty')) {
-        $body.frequency_penalty = $FrequencyPenalty
-    }
-
-    Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
-
-    $chat = Invoke-FoundryApiRequest -Path '/v1/chat/completions' -Method POST -Body $body
-
-    return [PSCustomObject]@{
-        id         = $chat.id
-        object     = $chat.object
-        model      = $chat.model
-        message    = $chat.choices[0].message
-        successful = $chat.successful
-    }
 }

@@ -140,6 +140,7 @@ $result.id                # completion ID
 | `PresencePenalty` | `double` | No | -2.0 – 2.0 | Penalises tokens already present in the context. |
 | `FrequencyPenalty` | `double` | No | -2.0 – 2.0 | Penalises tokens by their frequency in the context. |
 | `User` | `string` | No | default: `pwshChat` | End-user identifier forwarded to the API. |
+| `CountTokenOnly` | `switch` | No | — | Posts only `model` + `messages` to the token-count endpoint instead of generating a completion. **Not yet implemented in Foundry Local — currently returns HTTP 404.** |
 
 The returned `PSCustomObject` has the following properties:
 

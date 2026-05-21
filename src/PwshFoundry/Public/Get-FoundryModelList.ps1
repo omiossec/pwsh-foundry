@@ -13,7 +13,21 @@ function Get-FoundryModelList {
     #>
     [CmdletBinding()]
     [OutputType([object[]])]
-    param()
+    param(
+        [switch]$ByPassCache
+    )
+
+    if (-not $ByPassCache) {
+        $cacheAgeMinutes = if ($script:FoundryModelCacheTime) {
+            ([datetime]::UtcNow - $script:FoundryModelCacheTime).TotalMinutes
+        } else {
+            [double]::MaxValue
+        }
+
+        if ($script:FoundryModelCache -and $cacheAgeMinutes -lt 60) {
+            return $script:FoundryModelCache
+        }
+    }
 
     $response = Invoke-FoundryApiRequest -Path '/foundry/list' -Method GET
 
@@ -32,6 +46,7 @@ function Get-FoundryModelList {
     $selectedProperties = @(
         'name'
         'displayName'
+        'uri'
         'providerType'
         'version'
         'promptTemplate'
@@ -41,5 +56,8 @@ function Get-FoundryModelList {
         'maxOutputTokens'
     )
 
-    return @($items | Select-Object -Property $selectedProperties)
+    $script:FoundryModelCache = @($items | Select-Object -Property $selectedProperties)
+    $script:FoundryModelCacheTime = [datetime]::UtcNow
+
+    return $script:FoundryModelCache
 }
