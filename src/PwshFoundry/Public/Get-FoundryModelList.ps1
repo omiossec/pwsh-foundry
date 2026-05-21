@@ -13,16 +13,20 @@ function Get-FoundryModelList {
     #>
     [CmdletBinding()]
     [OutputType([object[]])]
-    param()
+    param(
+        [switch]$ByPassCache
+    )
 
-    $cacheAgeMinutes = if ($script:FoundryModelCacheTime) {
-        ([datetime]::UtcNow - $script:FoundryModelCacheTime).TotalMinutes
-    } else {
-        [double]::MaxValue
-    }
+    if (-not $ByPassCache) {
+        $cacheAgeMinutes = if ($script:FoundryModelCacheTime) {
+            ([datetime]::UtcNow - $script:FoundryModelCacheTime).TotalMinutes
+        } else {
+            [double]::MaxValue
+        }
 
-    if ($script:FoundryModelCache -and $cacheAgeMinutes -lt 60) {
-        return $script:FoundryModelCache
+        if ($script:FoundryModelCache -and $cacheAgeMinutes -lt 60) {
+            return $script:FoundryModelCache
+        }
     }
 
     $response = Invoke-FoundryApiRequest -Path '/foundry/list' -Method GET
