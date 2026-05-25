@@ -117,6 +117,34 @@ $msg = New-FoundryMessage -UserPrompt 'What is the capital of France?' `
 
 ---
 
+### `Get-FoundryStatus`
+
+Returns the status of the local Foundry OpenAI-compatible endpoint.
+
+```powershell
+Get-FoundryStatus
+```
+
+---
+
+### `Save-FoundryModel`
+
+Downloads a model to the local Foundry service by posting a download request with the model URI, provider type, and model ID.
+The model ID must exist in the Foundry catalogue (`Get-FoundryModelList`) — a terminating error is thrown otherwise.
+
+```powershell
+Save-FoundryModel -ModelID 'Phi-4-mini-instruct-generic-cpu:4' `
+                  -ModelURI 'azureml://registries/azureml/models/Phi-4-mini-instruct-generic-cpu/versions/4'
+```
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `ModelURI` | `string` | Yes | — | Full URI of the model in the registry. |
+| `ProviderType` | `string` | No | `AzureFoundryLocal` | Provider type passed to the download API. |
+| `ModelID` | `string` | Yes | — | Model ID as it appears in `Get-FoundryModelList` (e.g. `Phi-4-mini-instruct-generic-cpu:4`). |
+
+---
+
 ### `New-FoundryChat`
 
 Sends a chat completion request to the local Foundry service and returns a mapped result object.

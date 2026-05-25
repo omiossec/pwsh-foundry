@@ -34,8 +34,10 @@ function Invoke-FoundryApiRequest {
     Write-Debug "Foundry API $Method $uri"
 
     $invokeParams = @{
-        Uri         = $uri
-        Method      = $Method
+        Uri                      = $uri
+        Method                   = $Method
+        OperationTimeoutSeconds  = 120
+        ConnectionTimeoutSeconds = 120
     }
 
     if ($PSBoundParameters.ContainsKey('Body')) {
