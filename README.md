@@ -4,6 +4,8 @@
 
 > **Alpha notice** — the API surface is unstable and breaking changes may occur between releases.
 
+> **CLI version notice** — some cmdlets (e.g. `New-FoundryAudioTranscription`) require features only available in Foundry Local v1.1.0 or later, which must be installed manually. The version distributed via `winget` / `brew` auto-install may not include these features. Check `Get-FoundryVersion` and refer to the per-cmdlet notes for version requirements.
+
 ---
 
 ## Requirements
