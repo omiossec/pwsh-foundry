@@ -49,7 +49,7 @@ function Save-FoundryModel {
         }
     }
 
-    $apiParams = @{ Path = '/openai/download'; Method = 'POST'; Body = $body }
+    $apiParams = @{ Action = 'model-download'; Method = 'POST'; Body = $body }
     if ($PSBoundParameters.ContainsKey('Port')) { $apiParams['Port'] = $Port }
     Invoke-FoundryApiRequest @apiParams
 }

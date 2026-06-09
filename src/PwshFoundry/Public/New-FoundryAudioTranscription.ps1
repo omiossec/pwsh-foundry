@@ -62,5 +62,5 @@ function New-FoundryAudioTranscription {
 
     Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
-    return Invoke-FoundryApiRequest -Path '/v1/audio/transcriptions' -Method POST -Body $body
+    return Invoke-FoundryApiRequest -Action 'transcribe' -Method POST -Body $body
 }

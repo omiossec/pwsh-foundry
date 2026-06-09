@@ -69,7 +69,7 @@ function New-FoundryChat {
 
         Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
-        return Invoke-FoundryApiRequest -Path '/v1/chat/completions/tokenizer/encode/count' -Method POST -Body $body
+        return Invoke-FoundryApiRequest -Action 'tokenizer' -Method POST -Body $body
     }
     else {
 
@@ -102,7 +102,7 @@ function New-FoundryChat {
 
         Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
-        $chat = Invoke-FoundryApiRequest -Path '/v1/chat/completions' -Method POST -Body $body
+        $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body
 
         return [PSCustomObject]@{
             id         = $chat.id

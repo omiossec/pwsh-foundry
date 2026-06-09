@@ -14,7 +14,10 @@ function Get-FoundryModelList {
     [CmdletBinding()]
     [OutputType([object[]])]
     param(
-        [switch]$ByPassCache
+        [switch]$ByPassCache,
+
+        [Parameter()]
+        [int]$Port
     )
 
     if (-not $ByPassCache) {
@@ -29,7 +32,9 @@ function Get-FoundryModelList {
         }
     }
 
-    $response = Invoke-FoundryApiRequest -Path '/foundry/list' -Method GET
+    $apiParams = @{ Action = 'model-list'; Method = 'GET' }
+    if ($PSBoundParameters.ContainsKey('Port')) { $apiParams['Port'] = $Port }
+    $response = Invoke-FoundryApiRequest @apiParams
 
     $items = if ($response -is [array]) {
         $response

@@ -2,6 +2,9 @@
 
 $script:FoundryCliBin = $null
 
+$script:FoundryVersionCache     = $null
+$script:FoundryVersionCacheTime = $null
+
 $script:FoundryWebServerProcess  = $null
 $script:FoundryWebServerEndpoint = $null
 $script:FoundryWebServerModelId  = $null

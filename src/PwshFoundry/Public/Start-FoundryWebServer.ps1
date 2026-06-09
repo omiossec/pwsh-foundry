@@ -26,7 +26,7 @@ function Start-FoundryWebServer {
     .EXAMPLE
         $srv = Start-FoundryWebServer -ModelAlias 'qwen2.5-0.5b'
         # $srv.Endpoint -> "http://127.0.0.1:52495/v1"
-        Invoke-FoundryApiRequest -FoundryHost 'http://127.0.0.1' -Port 52495 -Path '/v1/models' -Method GET
+        Invoke-FoundryApiRequest -FoundryHost 'http://127.0.0.1' -Port 52495 -Action 'model-list' -Method GET
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
