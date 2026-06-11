@@ -96,9 +96,13 @@ function Invoke-FoundryApiRequest {
         Invoke-RestMethod @invokeParams
     }
     catch {
+        $message = "Foundry API request failed ($Method $uri): $($_.Exception.Message)"
+        if ($_.ErrorDetails.Message) {
+            $message += " Server response: $($_.ErrorDetails.Message)"
+        }
         $PSCmdlet.ThrowTerminatingError(
             [System.Management.Automation.ErrorRecord]::new(
-                [System.Exception]::new("Foundry API request failed ($Method $uri): $($_.Exception.Message)"),
+                [System.Exception]::new($message),
                 'FoundryApiRequestError',
                 [System.Management.Automation.ErrorCategory]::ConnectionError,
                 $uri
