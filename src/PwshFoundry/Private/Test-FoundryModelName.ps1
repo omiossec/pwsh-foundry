@@ -10,5 +10,5 @@ function Test-FoundryModelName {
 
     $models = Get-FoundryModelList
 
-    return [bool]($models | Where-Object { $_.name -eq $ModelName })
+    return [bool]($models | Where-Object { $_.id -eq $ModelName })
 }

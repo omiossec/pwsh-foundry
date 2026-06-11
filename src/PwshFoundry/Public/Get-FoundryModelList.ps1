@@ -5,19 +5,15 @@ function Get-FoundryModelList {
     .SYNOPSIS
         Lists AI models available to run or download from Foundry.
     .DESCRIPTION
-        Queries the Foundry local service REST API for the full model catalogue.
-        Starts the Foundry service automatically if it is not running.
-        Returns a projected set of properties for each model.
+        Calls the Foundry CLI (`foundry model list --output json`) for the full
+        model catalogue and returns a projected set of properties for each model.
     .EXAMPLE
         Get-FoundryModelList
     #>
     [CmdletBinding()]
     [OutputType([object[]])]
     param(
-        [switch]$ByPassCache,
-
-        [Parameter()]
-        [int]$Port
+        [switch]$ByPassCache
     )
 
     if (-not $ByPassCache) {
@@ -32,14 +28,12 @@ function Get-FoundryModelList {
         }
     }
 
-    $apiParams = @{ Action = 'model-list'; Method = 'GET' }
-    if ($PSBoundParameters.ContainsKey('Port')) { $apiParams['Port'] = $Port }
-    $response = Invoke-FoundryApiRequest @apiParams
+    $response = Invoke-FoundryCli -Arguments @('model', 'list') -Json
 
-    $items = if ($response -is [array]) {
+    $items = if ($response.models) {
+        $response.models
+    } elseif ($response -is [array]) {
         $response
-    } elseif ($response.data) {
-        $response.data
     } else {
         @()
     }
@@ -49,16 +43,15 @@ function Get-FoundryModelList {
     }
 
     $selectedProperties = @(
-        'name'
+        'alias'
+        'id'
         'displayName'
-        'uri'
-        'providerType'
-        'version'
-        'promptTemplate'
-        'publisher'
-        'task'
-        @{ Name = 'deviceType'; Expression = { $_.runtime.deviceType } }
-        'maxOutputTokens'
+        'type'
+        'device'
+        'fileSizeMb'
+        'cached'
+        'license'
+        'supportsToolCalling'
     )
 
     $script:FoundryModelCache = @($items | Select-Object -Property $selectedProperties)

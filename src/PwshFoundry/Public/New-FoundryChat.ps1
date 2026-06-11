@@ -73,10 +73,15 @@ function New-FoundryChat {
     }
     else {
 
+            $headers = @{
+        "Authorization" = "Bearer "
+        "Content-Type"  = "application/json"
+    }
+
         $body = @{
-            model    = $Model
+            model    = "phi-3-mini-128k-instruct-qnn-npu" # $Model
             messages = $Message.GetMessages()
-            user     = $User
+          #  prompt_cache_key     = $User
         }
 
         if ($PSBoundParameters.ContainsKey('Temperature')) {
@@ -102,7 +107,7 @@ function New-FoundryChat {
 
         Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
-        $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body
+        $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body -Headers $headers
 
         return [PSCustomObject]@{
             id         = $chat.id
