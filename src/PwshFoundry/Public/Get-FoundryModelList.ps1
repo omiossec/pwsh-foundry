@@ -5,8 +5,10 @@ function Get-FoundryModelList {
     .SYNOPSIS
         Lists AI models available to run or download from Foundry.
     .DESCRIPTION
-        Calls the Foundry CLI (`foundry model list --output json`) for the full
-        model catalogue and returns a projected set of properties for each model.
+        Returns the full model catalogue with a projected set of properties for
+        each model. Uses the Foundry CLI (`foundry model list --output json`)
+        when it is installed, and falls back to the Azure AI Foundry Local SDK
+        (via a compiled .NET host) when only the SDK is available.
     .EXAMPLE
         Get-FoundryModelList
     #>
@@ -28,14 +30,19 @@ function Get-FoundryModelList {
         }
     }
 
-    $response = Invoke-FoundryCli -Arguments @('model', 'list') -Json
+    if ((Get-FoundryVersion).Source -eq 'SDK') {
+        $items = Get-FoundryModelListFromSdk
+    }
+    else {
+        $response = Invoke-FoundryCli -Arguments @('model', 'list') -Json
 
-    $items = if ($response.models) {
-        $response.models
-    } elseif ($response -is [array]) {
-        $response
-    } else {
-        @()
+        $items = if ($response.models) {
+            $response.models
+        } elseif ($response -is [array]) {
+            $response
+        } else {
+            @()
+        }
     }
 
     if (-not $items) {

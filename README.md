@@ -13,14 +13,18 @@
 | Requirement | Version |
 |---|---|
 | PowerShell | 7.4 or later |
-| Foundry Local CLI | 0.10.0 or later (see note below) |
-| .NET SDK | 8.0 or later *(required by `Start-FoundryWebServer`)* |
+| Foundry Local CLI | 0.10.0 or later *(optional — see SDK mode below)* |
+| .NET SDK | 8.0 or later *(required by `Start-FoundryWebServer`; also required by `Get-FoundryModelList` and `New-FoundryChat` when the CLI is absent)* |
 | Pester *(tests only)* | 5.x |
 | PSScriptAnalyzer *(build only)* | latest |
 
 > **API version notice** — Foundry Local CLI **0.10.0** (SDK version **1.10**) changed several REST endpoint paths.
 > The module detects the version automatically and routes requests to the correct URI.
 > See [API endpoint changes (v0.10.0)](#api-endpoint-changes-v0100) for the full mapping.
+
+> **SDK mode** — when the Foundry Local CLI is not installed, the module falls back to the Azure AI Foundry Local .NET SDK for operations that support it (`Get-FoundryModelList`, `New-FoundryChat`).
+> The .NET 8 SDK (`dotnet` on `PATH`) must be available in this case.
+> `Get-FoundryVersion` returns `Source = 'SDK'` to indicate this mode.
 
 ---
 
@@ -52,7 +56,7 @@ Import-Module ./src/PwshFoundry/PwshFoundry.psd1 -Force
 ```powershell
 Import-Module ./src/PwshFoundry/PwshFoundry.psd1 -Force
 
-# Check the CLI version
+# Check the CLI version (or detect SDK mode)
 Get-FoundryVersion
 
 # List all models available in the Foundry catalogue
@@ -61,9 +65,9 @@ Get-FoundryModelList
 # List models already downloaded to the local cache
 Get-FoundryModelCache
 
-# Send a chat request
+# Send a chat request — the model is loaded automatically if not already running
 $msg    = New-FoundryMessage -UserPrompt 'Explain quantum computing in plain English'
-$result = New-FoundryChat -Message $msg -Model 'phi-3-mini-128k-instruct-qnn-npu:3'
+$result = New-FoundryChat -Message $msg -Model 'qwen2.5-0.5b-instruct-generic-cpu'
 $result.message.content
 ```
 
@@ -101,14 +105,38 @@ The `Source` and `Version` properties drive the automatic API-path selection in 
 
 ### `Get-FoundryModelList`
 
-Queries the Foundry local service for the full model catalogue (downloaded or not).
-Starts the service automatically if it is not running.
+Lists all models in the Foundry catalogue (downloaded or not).
+Results are cached for 60 minutes; use `-ByPassCache` to force a fresh query.
+
+When the Foundry CLI is installed, it calls `foundry model list --output json`.
+When only the SDK is available (`Get-FoundryVersion` returns `Source = 'SDK'`), it compiles and runs a temporary .NET host that queries the catalogue via `Microsoft.AI.Foundry.Local`. The .NET 8 SDK is required in this case.
 
 ```powershell
 Get-FoundryModelList
+
+# Force a fresh catalogue query
+Get-FoundryModelList -ByPassCache
 ```
 
-Returns objects with properties: `name`, `displayName`, `providerType`, `version`, `promptTemplate`, `publisher`, `task`, `deviceType`, `maxOutputTokens`.
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ByPassCache` | `switch` | No | Skips the 60-minute in-memory cache and queries the source directly. |
+
+Returns objects with the following properties:
+
+| Property | Description |
+|---|---|
+| `alias` | Short model alias (e.g. `qwen2.5-0.5b`). |
+| `id` | Full versioned model ID (e.g. `qwen2.5-0.5b-instruct-generic-cpu:4`). |
+| `displayName` | Human-readable model name. |
+| `type` | Model task: `Chat`, `Embedding`, `Multimodal`, or `Speech`. |
+| `device` | Target hardware: `Cpu`, `Gpu`, or `Npu`. |
+| `fileSizeMb` | Download size in megabytes. |
+| `cached` | `$true` if the model is already downloaded locally. |
+| `license` | License identifier (e.g. `MIT`). |
+| `supportsToolCalling` | `$true` if the model supports tool/function calling. |
+
+> **Note** — in SDK mode only CPU-compatible models are returned, because the SDK enumerates variants for the registered execution providers only. CLI mode returns all variants including NPU/GPU.
 
 ---
 
@@ -213,9 +241,14 @@ Save-FoundryModel -ModelID 'Phi-4-mini-instruct-generic-cpu:4' `
 
 Sends a chat completion request to the local Foundry service and returns a mapped result object.
 
+Since Foundry Local **0.10.0**, the service no longer auto-loads a model on the first request.
+`New-FoundryChat` handles this automatically: it checks whether the requested model is loaded and calls the load endpoint if not. The first call for an unloaded model may take additional time while the model initialises.
+
+Pass the bare model ID (without the `:version` suffix) — both forms are accepted.
+
 ```powershell
 $msg    = New-FoundryMessage -UserPrompt 'Write a haiku about PowerShell'
-$result = New-FoundryChat -Message $msg -Model 'phi-3-mini-128k-instruct-qnn-npu:3'
+$result = New-FoundryChat -Message $msg -Model 'qwen2.5-0.5b-instruct-generic-cpu'
 
 $result.message.content   # assistant reply text
 $result.model             # model that handled the request
@@ -225,7 +258,7 @@ $result.id                # completion ID
 | Parameter | Type | Required | Constraints | Description |
 |---|---|---|---|---|
 | `Message` | `FoundryMessage` | Yes | — | Message object from `New-FoundryMessage`. |
-| `Model` | `string` | Yes | — | Model ID (e.g. `phi-3-mini-128k-instruct-qnn-npu:3`). Check `Get-FoundryModelList`  |
+| `Model` | `string` | Yes | — | Model ID from `Get-FoundryModelList` (e.g. `qwen2.5-0.5b-instruct-generic-cpu`). The `:version` suffix is optional. |
 | `Temperature` | `double` | No | 0.0 – 2.0 | Sampling temperature. |
 | `MaxTokens` | `int` | No | 1 – 2048 | Maximum tokens to generate. |
 | `TopP` | `double` | No | 0.0 – 1.0 | Nucleus sampling threshold. |
@@ -256,8 +289,8 @@ The module detects the active version via `Get-FoundryVersion` and automatically
 | Service status | `GET /openai/status` | `GET /status` |
 | Full model catalogue | `GET /foundry/list` | `GET /v1/models` |
 | Loaded models | `GET /openai/models` | `GET /models/loaded` |
-| Load a model | `POST /openai/load/{name}` | `POST /models/load/{name}` |
-| Unload a model | `POST /openai/unload/{name}` | `POST /models/unload/{name}` |
+| Load a model | `POST /openai/load/{name}` | `GET /models/load/{name}` |
+| Unload a model | `POST /openai/unload/{name}` | `GET /models/unload/{name}` |
 | Download a model | `POST /openai/download` | *(removed — throws error)* |
 | Token count | `POST /v1/chat/completions/tokenizer/encode/count` | *(removed — throws error)* |
 | Chat completion | `POST /v1/chat/completions` | `POST /v1/chat/completions` *(unchanged)* |
