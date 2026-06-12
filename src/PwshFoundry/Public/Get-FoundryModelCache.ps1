@@ -14,7 +14,7 @@ function Get-FoundryModelCache {
     [OutputType([object[]])]
     param()
 
-    $response = Invoke-FoundryApiRequest -Path '/openai/models' -Method GET
+    $response = Invoke-FoundryApiRequest -Action 'models-loaded' -Method GET
 
     Write-Verbose $response.getType() 
     Write-Verbose ($response | ConvertTo-Json -Depth 10)

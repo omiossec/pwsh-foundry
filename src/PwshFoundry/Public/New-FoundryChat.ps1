@@ -69,14 +69,22 @@ function New-FoundryChat {
 
         Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
-        return Invoke-FoundryApiRequest -Path '/v1/chat/completions/tokenizer/encode/count' -Method POST -Body $body
+        return Invoke-FoundryApiRequest -Action 'tokenizer' -Method POST -Body $body
     }
     else {
+        # Since Foundry Local 0.10.0 the OpenAI-compatible chat endpoint no longer
+        # auto-loads models and returns 400 if the model is not loaded.
+        $loadedModels = @(Invoke-FoundryApiRequest -Action 'models-loaded' -Method GET)
+        $isLoaded = [bool]($loadedModels | Where-Object { $_ -eq $Model -or $_ -like "${Model}:*" })
+
+        if (-not $isLoaded) {
+            Write-Verbose "Model '$Model' is not loaded; loading it now (this can take a while)."
+            $null = Invoke-FoundryApiRequest -Action 'model-load' -Method GET -PathParameters @{ name = $Model }
+        }
 
         $body = @{
             model    = $Model
             messages = $Message.GetMessages()
-            user     = $User
         }
 
         if ($PSBoundParameters.ContainsKey('Temperature')) {
@@ -102,7 +110,7 @@ function New-FoundryChat {
 
         Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
-        $chat = Invoke-FoundryApiRequest -Path '/v1/chat/completions' -Method POST -Body $body
+        $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body
 
         return [PSCustomObject]@{
             id         = $chat.id

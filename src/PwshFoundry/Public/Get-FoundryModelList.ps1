@@ -5,9 +5,10 @@ function Get-FoundryModelList {
     .SYNOPSIS
         Lists AI models available to run or download from Foundry.
     .DESCRIPTION
-        Queries the Foundry local service REST API for the full model catalogue.
-        Starts the Foundry service automatically if it is not running.
-        Returns a projected set of properties for each model.
+        Returns the full model catalogue with a projected set of properties for
+        each model. Uses the Foundry CLI (`foundry model list --output json`)
+        when it is installed, and falls back to the Azure AI Foundry Local SDK
+        (via a compiled .NET host) when only the SDK is available.
     .EXAMPLE
         Get-FoundryModelList
     #>
@@ -29,14 +30,19 @@ function Get-FoundryModelList {
         }
     }
 
-    $response = Invoke-FoundryApiRequest -Path '/foundry/list' -Method GET
+    if ((Get-FoundryVersion).Source -eq 'SDK') {
+        $items = Get-FoundryModelListFromSdk
+    }
+    else {
+        $response = Invoke-FoundryCli -Arguments @('model', 'list') -Json
 
-    $items = if ($response -is [array]) {
-        $response
-    } elseif ($response.data) {
-        $response.data
-    } else {
-        @()
+        $items = if ($response.models) {
+            $response.models
+        } elseif ($response -is [array]) {
+            $response
+        } else {
+            @()
+        }
     }
 
     if (-not $items) {
@@ -44,16 +50,15 @@ function Get-FoundryModelList {
     }
 
     $selectedProperties = @(
-        'name'
+        'alias'
+        'id'
         'displayName'
-        'uri'
-        'providerType'
-        'version'
-        'promptTemplate'
-        'publisher'
-        'task'
-        @{ Name = 'deviceType'; Expression = { $_.runtime.deviceType } }
-        'maxOutputTokens'
+        'type'
+        'device'
+        'fileSizeMb'
+        'cached'
+        'license'
+        'supportsToolCalling'
     )
 
     $script:FoundryModelCache = @($items | Select-Object -Property $selectedProperties)

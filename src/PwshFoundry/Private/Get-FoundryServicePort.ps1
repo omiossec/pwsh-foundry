@@ -5,14 +5,27 @@ function Get-FoundryServicePort {
     [OutputType([int])]
     param()
 
-    $status = Invoke-FoundryCli -Arguments @('service', 'status')
+$versionInfo = Get-FoundryVersion
+$useNewApi = $versionInfo.Source -eq 'SDK' -or (
+        $versionInfo.Version -and ([version]$versionInfo.Version -ge [version]'0.10.0')
+    )
 
-    if (@($status) -imatch 'service is not running') {
+    if ($useNewApi) {
+        $FoundryCmd = "server"
+    }
+    else {
+        $FoundryCmd = "service"
+    }
+
+        $status = Invoke-FoundryCli -Arguments @($FoundryCmd, 'status')
+    
+
+    if (@($status) -imatch 'Not running') {
         Write-Verbose 'Foundry service is not running — starting it now.'
-        Invoke-FoundryCli -Arguments @('service', 'start') | Out-Null
-        $status = Invoke-FoundryCli -Arguments @('service', 'status')
+        Invoke-FoundryCli -Arguments @($FoundryCmd, 'start') | Out-Null
+        $status = Invoke-FoundryCli -Arguments @($FoundryCmd, 'status')
 
-        if (@($status) -imatch 'service is not running') {
+        if (@($status) -imatch 'Not running') {
             $PSCmdlet.ThrowTerminatingError(
                 [System.Management.Automation.ErrorRecord]::new(
                     [System.Exception]::new('Foundry service failed to start.'),
@@ -24,7 +37,12 @@ function Get-FoundryServicePort {
         }
     }
 
-    $port = ([regex]'(?<=:)\d+(?=/)').Match($status).Value
+    if ($useNewApi) {
+        $urlLine = @($status) | Where-Object { $_ -match 'http://' } | Select-Object -First 1
+        $port = ([regex]'(?<=:)\d+\s*$').Match($urlLine).Value
+    } else {
+        $port = ([regex]'(?<=:)\d+(?=/)').Match($status).Value
+    }
 
     if (-not $port) {
         $PSCmdlet.ThrowTerminatingError(

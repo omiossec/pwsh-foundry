@@ -22,7 +22,10 @@ function Save-FoundryModel {
         [string]$ProviderType = 'AzureFoundryLocal',
 
         [Parameter(Mandatory)]
-        [string]$ModelID
+        [string]$ModelID,
+
+        [Parameter()]
+        [int]$Port
     )
 
     if (-not (Test-FoundryModelName -ModelName $ModelID)) {
@@ -46,5 +49,7 @@ function Save-FoundryModel {
         }
     }
 
-    Invoke-FoundryApiRequest -Path '/openai/download' -Method POST -Body $body
+    $apiParams = @{ Action = 'model-download'; Method = 'POST'; Body = $body }
+    if ($PSBoundParameters.ContainsKey('Port')) { $apiParams['Port'] = $Port }
+    Invoke-FoundryApiRequest @apiParams
 }

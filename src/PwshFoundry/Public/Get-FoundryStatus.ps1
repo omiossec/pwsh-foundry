@@ -14,5 +14,5 @@ function Get-FoundryStatus {
     [OutputType([object])]
     param()
 
-    Invoke-FoundryApiRequest -Path '/openai/status' -Method GET
+    Invoke-FoundryApiRequest -Action 'status' -Method GET
 }
