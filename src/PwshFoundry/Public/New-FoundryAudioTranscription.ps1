@@ -11,6 +11,10 @@ function New-FoundryAudioTranscription {
         New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile 'C:\recordings\meeting.mp3'
     .EXAMPLE
         New-FoundryAudioTranscription -ModelId 'whisper-large-v3' -AudioFile './interview.wav' -Language 'fr' -ResponseFormat 'json'
+    .PARAMETER LogFilePath
+        Optional path to a log file. When specified, the request and the transcription
+        result are appended to this file via New-FoundryLogEntries. When omitted,
+        New-FoundryLogEntries logs to its default location.
     .NOTES
         This function requires Foundry Local v1.1.0 installed manually. The audio transcription
         endpoint is not available in earlier versions or in the auto-installed distribution.
@@ -35,7 +39,10 @@ function New-FoundryAudioTranscription {
 
         [Parameter()]
         [ValidateSet('text', 'json', 'verbose_json')]
-        [string] $ResponseFormat = 'text'
+        [string] $ResponseFormat = 'text',
+
+        [Parameter()]
+        [string] $LogFilePath
     )
 
     if (-not (Test-Path -Path $AudioFile -PathType Leaf)) {
@@ -45,6 +52,19 @@ function New-FoundryAudioTranscription {
                 'AudioFileNotFound',
                 [System.Management.Automation.ErrorCategory]::ObjectNotFound,
                 $AudioFile
+            )
+        )
+    }
+
+    if ($PSBoundParameters.ContainsKey('LogFilePath') -and -not (Test-FoundryLogFilePath -Path $LogFilePath)) {
+        $PSCmdlet.ThrowTerminatingError(
+            [System.Management.Automation.ErrorRecord]::new(
+                [System.ArgumentException]::new(
+                    "LogFilePath '$LogFilePath' is not valid, or its parent directory does not exist."
+                ),
+                'FoundryInvalidLogFilePath',
+                [System.Management.Automation.ErrorCategory]::InvalidArgument,
+                $LogFilePath
             )
         )
     }
@@ -72,5 +92,20 @@ function New-FoundryAudioTranscription {
 
     Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
-    return Invoke-FoundryApiRequest -Action 'transcribe' -Method POST -Body $body
+    $transcription = Invoke-FoundryApiRequest -Action 'transcribe' -Method POST -Body $body
+
+    $assistantPrompt = if ($transcription -is [string]) { $transcription } else { $transcription | ConvertTo-Json -Depth 10 -Compress }
+
+    $logParams = @{
+        Model           = $ModelId
+        SystemPrompt    = ''
+        UserPrompt      = "Audio file: $AudioFile (Language: $Language)"
+        AssistantPrompt = $assistantPrompt
+    }
+    if ($PSBoundParameters.ContainsKey('LogFilePath')) {
+        $logParams['LogFilePath'] = $LogFilePath
+    }
+    New-FoundryLogEntries @logParams
+
+    return $transcription
 }

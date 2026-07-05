@@ -266,6 +266,7 @@ $result.id                # completion ID
 | `FrequencyPenalty` | `double` | No | -2.0 – 2.0 | Penalises tokens by their frequency in the context. |
 | `User` | `string` | No | default: `pwshChat` | End-user identifier forwarded to the API. |
 | `CountTokenOnly` | `switch` | No | — | Posts to the token-count endpoint instead of generating a completion. **Removed in Foundry Local v0.10.0+** — throws a terminating error on newer services. Was `/v1/chat/completions/tokenizer/encode/count` on older versions. |
+| `LogFilePath` | `string` | No | default: temp folder | Path to a log file. When the request completes, the system prompt, user prompt, and assistant response are appended to it as a JSON-line entry via `New-FoundryLogEntries`. If omitted, entries are logged to `PwshFoundry_ChatLog.jsonl` in the current user's temp directory. An invalid path (or one whose parent directory doesn't exist) throws a terminating error before any request is sent. Not applied when `-CountTokenOnly` is used. |
 
 The returned `PSCustomObject` has the following properties:
 
@@ -276,6 +277,31 @@ The returned `PSCustomObject` has the following properties:
 | `model` | `$response.model` |
 | `message` | `$response.choices[0].message` |
 | `successful` | `$response.successful` |
+
+---
+
+### `New-FoundryAudioTranscription`
+
+Transcribes an audio file to text using a local Foundry Whisper model, via the `/v1/audio/transcriptions` endpoint.
+
+> **Requires Foundry Local v1.1.0**, installed manually — see the CLI version notice at the top of this document.
+
+```powershell
+New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile 'C:\recordings\meeting.mp3'
+
+# With language and response format
+New-FoundryAudioTranscription -ModelId 'whisper-large-v3' -AudioFile './interview.wav' `
+                              -Language 'fr' -ResponseFormat 'json'
+```
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `ModelId` | `string` | Yes | — | Whisper model ID (must match `whisper`, case-insensitive). |
+| `AudioFile` | `string` | Yes | — | Path to the audio file. Must exist and have a `.mp3`, `.wav`, `.flac`, `.ogg`, or `.webm` extension. |
+| `Language` | `string` | No | `en` | Source language hint passed to the model. |
+| `Temperature` | `double` | No | — | Sampling temperature, `0.0`–`1.0`. |
+| `ResponseFormat` | `string` | No | `text` | One of `text`, `json`, `verbose_json`. |
+| `LogFilePath` | `string` | No | default: temp folder | Path to a log file. When the request completes, an entry is appended via `New-FoundryLogEntries` recording the model, the audio file/language as the "user prompt", and the transcription result as the "assistant response". If omitted, entries are logged to `PwshFoundry_ChatLog.jsonl` in the current user's temp directory. An invalid path throws a terminating error before any request is sent. |
 
 ---
 

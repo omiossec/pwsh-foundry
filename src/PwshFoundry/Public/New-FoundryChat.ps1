@@ -7,6 +7,10 @@ function New-FoundryChat {
     .DESCRIPTION
         Builds an OpenAI-compatible chat completion body from a FoundryMessage object
         and optional sampling parameters, then POSTs it to /v1/chat/completions.
+    .PARAMETER LogFilePath
+        Optional path to a log file. When specified, the system prompt, user prompt, and
+        assistant response are appended to this file via New-FoundryLogEntries. When
+        omitted, New-FoundryLogEntries logs to its default location.
     .EXAMPLE
         $msg    = New-FoundryMessage -UserPrompt 'Explain quantum computing'
         $result = New-FoundryChat -Message $msg -Model 'phi-3-mini'
@@ -44,7 +48,10 @@ function New-FoundryChat {
         [string] $User = 'pwshChat',
 
         [Parameter()]
-        [switch] $CountTokenOnly
+        [switch] $CountTokenOnly,
+
+        [Parameter()]
+        [string] $LogFilePath
     )
 
     if (-not (Test-FoundryModelName -ModelName $Model)) {
@@ -56,6 +63,19 @@ function New-FoundryChat {
                 'FoundryModelNotFound',
                 [System.Management.Automation.ErrorCategory]::InvalidArgument,
                 $Model
+            )
+        )
+    }
+
+    if ($PSBoundParameters.ContainsKey('LogFilePath') -and -not (Test-FoundryLogFilePath -Path $LogFilePath)) {
+        $PSCmdlet.ThrowTerminatingError(
+            [System.Management.Automation.ErrorRecord]::new(
+                [System.ArgumentException]::new(
+                    "LogFilePath '$LogFilePath' is not valid, or its parent directory does not exist."
+                ),
+                'FoundryInvalidLogFilePath',
+                [System.Management.Automation.ErrorCategory]::InvalidArgument,
+                $LogFilePath
             )
         )
     }
@@ -111,6 +131,17 @@ function New-FoundryChat {
         Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
         $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body
+
+        $logParams = @{
+            Model           = $Model
+            SystemPrompt    = $Message.SystemPrompt
+            UserPrompt      = $Message.UserPrompt
+            AssistantPrompt = $chat.choices[0].message.content
+        }
+        if ($PSBoundParameters.ContainsKey('LogFilePath')) {
+            $logParams['LogFilePath'] = $LogFilePath
+        }
+        New-FoundryLogEntries @logParams
 
         return [PSCustomObject]@{
             id         = $chat.id
