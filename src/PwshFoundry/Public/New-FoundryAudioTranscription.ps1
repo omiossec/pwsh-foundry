@@ -60,6 +60,16 @@ function New-FoundryAudioTranscription {
         $body.temperature = $Temperature
     }
 
+            # Since Foundry Local 0.10.0 the OpenAI-compatible chat endpoint no longer
+        # auto-loads models and returns 400 if the model is not loaded.
+        $loadedModels = @(Invoke-FoundryApiRequest -Action 'models-loaded' -Method GET)
+        $isLoaded = [bool]($loadedModels | Where-Object { $_ -eq $ModelId -or $_ -like "${ModelId}:*" })
+
+        if (-not $isLoaded) {
+            Write-Verbose "Model '$Model' is not loaded; loading it now (this can take a while)."
+            $null = Invoke-FoundryApiRequest -Action 'model-load' -Method GET -PathParameters @{ name = $Model }
+        }
+
     Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
     return Invoke-FoundryApiRequest -Action 'transcribe' -Method POST -Body $body
