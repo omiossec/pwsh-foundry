@@ -3,24 +3,18 @@
 function Save-FoundryModel {
     <#
     .SYNOPSIS
-        Downloads a model to the local Foundry service.
+        Loads a model into the local Foundry service, downloading it first if needed.
     .DESCRIPTION
-        Validates that the model ID exists in the local Foundry catalogue, then
-        POSTs a download request to /openai/download so Foundry fetches the model
-        from the given URI.
+        Validates that the model ID exists in the local Foundry catalogue, then calls
+        /models/load/{name} so Foundry fetches and loads the model. Foundry Local
+        0.10+ removed the separate download-by-URI endpoint; loading by name now
+        handles both fetching and loading.
     .EXAMPLE
-        Save-FoundryModel -ModelID 'Phi-4-mini-instruct-generic-cpu:4' `
-                          -ModelURI 'azureml://registries/azureml/models/Phi-4-mini-instruct-generic-cpu/versions/4'
+        Save-FoundryModel -ModelID 'Phi-4-mini-instruct-generic-cpu:4'
     #>
     [CmdletBinding()]
     [OutputType([object])]
     param(
-        [Parameter(Mandatory)]
-        [string]$ModelURI,
-
-        [Parameter()]
-        [string]$ProviderType = 'AzureFoundryLocal',
-
         [Parameter(Mandatory)]
         [string]$ModelID,
 
@@ -41,15 +35,11 @@ function Save-FoundryModel {
         )
     }
 
-    $body = @{
-        model = @{
-            Uri          = $ModelURI
-            ProviderType = $ProviderType
-            Name         = $ModelID
-        }
+    $apiParams = @{
+        Action         = 'model-load'
+        Method         = 'GET'
+        PathParameters = @{ name = $ModelID }
     }
-
-    $apiParams = @{ Action = 'model-download'; Method = 'POST'; Body = $body }
     if ($PSBoundParameters.ContainsKey('Port')) { $apiParams['Port'] = $Port }
     Invoke-FoundryApiRequest @apiParams
 }

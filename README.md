@@ -248,22 +248,19 @@ Stop-FoundryWebServer
 
 ### `Save-FoundryModel`
 
-Downloads a model to the local Foundry service by posting a download request with the model URI, provider type, and model ID.
+Loads a model into the local Foundry service, downloading it first if it isn't already cached, by calling `GET /models/load/{name}`.
 The model ID must exist in the Foundry catalogue (`Get-FoundryModelList`) — a terminating error is thrown otherwise.
 
-> **Not available in Foundry Local v0.10.0+** — the `/openai/download` endpoint was removed in the new API.
-> A terminating error is thrown when this cmdlet is called against a v0.10.0+ service.
+> Foundry Local **0.10.0+** removed the separate download-by-URI endpoint (`/openai/download`); loading a model by name now handles both fetching and loading, so this cmdlet works the same way across CLI versions.
 
 ```powershell
-Save-FoundryModel -ModelID 'Phi-4-mini-instruct-generic-cpu:4' `
-                  -ModelURI 'azureml://registries/azureml/models/Phi-4-mini-instruct-generic-cpu/versions/4'
+Save-FoundryModel -ModelID 'Phi-4-mini-instruct-generic-cpu:4'
 ```
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `ModelURI` | `string` | Yes | — | Full URI of the model in the registry. |
-| `ProviderType` | `string` | No | `AzureFoundryLocal` | Provider type passed to the download API. |
 | `ModelID` | `string` | Yes | — | Model ID as it appears in `Get-FoundryModelList` (e.g. `Phi-4-mini-instruct-generic-cpu:4`). |
+| `Port` | `int` | No | — | Overrides the port used to reach the local Foundry service. |
 
 ---
 
@@ -360,7 +357,7 @@ The module detects the active version via `Get-FoundryVersion` and automatically
 | Loaded models | `GET /openai/models` | `GET /models/loaded` |
 | Load a model | `POST /openai/load/{name}` | `GET /models/load/{name}` |
 | Unload a model | `POST /openai/unload/{name}` | `GET /models/unload/{name}` |
-| Download a model | `POST /openai/download` | *(removed — throws error)* |
+| Download a model | `POST /openai/download` | *(removed — use `Save-FoundryModel`, which now loads by name via `GET /models/load/{name}`)* |
 | Token count | `POST /v1/chat/completions/tokenizer/encode/count` | *(removed — throws error)* |
 | Chat completion | `POST /v1/chat/completions` | `POST /v1/chat/completions` *(unchanged)* |
 | Audio transcription | `POST /v1/audio/transcriptions` | `POST /v1/audio/transcriptions` *(unchanged)* |
