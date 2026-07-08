@@ -1,10 +1,10 @@
 # pwsh-foundry
 
-**PwshFoundry** is a PowerShell module (v0.1.0, alpha) that wraps the [Microsoft Foundry Local](https://github.com/microsoft/foundry-local) CLI and REST API so that PowerShell users and automation scripts can interact with local AI workloads without dropping into raw `afoundry` commands or hand-crafting HTTP requests.
+**PwshFoundry** is a PowerShell module (v0.1.10, alpha) that wraps the [Microsoft Foundry Local](https://github.com/microsoft/foundry-local) CLI and REST API so that PowerShell users and automation scripts can interact with local AI workloads without dropping into raw `afoundry` commands or hand-crafting HTTP requests.
 
 > **Alpha notice** — the API surface is unstable and breaking changes may occur between releases.
 
-> **CLI version notice** — some cmdlets (e.g. `New-FoundryAudioTranscription`) require features only available in Foundry Local v1.1.0 or later, which must be installed manually. The version distributed via `winget` / `brew` auto-install may not include these features. Check `Get-FoundryVersion` and refer to the per-cmdlet notes for version requirements.
+> **CLI version notice** — some cmdlets (e.g. `New-FoundryAudioTranscription`) require features only available in Foundry Local v1.1.1 or later, which must be installed manually. The version distributed via `winget` / `brew` auto-install may not include these features. Check `Get-FoundryVersion` and refer to the per-cmdlet notes for version requirements.
 
 ---
 
@@ -18,7 +18,7 @@
 | Pester *(tests only)* | 5.x |
 | PSScriptAnalyzer *(build only)* | latest |
 
-> **API version notice** — Foundry Local CLI **0.10.0** (SDK version **1.10**) changed several REST endpoint paths.
+> **API version notice** — Foundry Local CLI **0.10.1** (SDK version **1.20**) changed several REST endpoint paths.
 > The module detects the version automatically and routes requests to the correct URI.
 > See [API endpoint changes (v0.10.0)](#api-endpoint-changes-v0100) for the full mapping.
 
@@ -170,6 +170,36 @@ $msg = New-FoundryMessage -UserPrompt 'What is the capital of France?' `
 
 ---
 
+### `New-FoundryChatContext`
+
+Creates a `FoundryChatContext` object for multi-turn conversations. It is seeded with a system prompt and an initial user prompt, then grows as the conversation continues — pass it to `New-FoundryChat -Context` instead of `-Message` to have each call automatically append the assistant's reply to the history.
+
+```powershell
+$ctx    = New-FoundryChatContext -UserPrompt 'Explain quantum computing in plain English'
+$result = New-FoundryChat -Context $ctx -Model 'qwen2.5-0.5b-instruct-generic-cpu'
+$result.message.content
+
+# Continue the conversation — $ctx now includes the assistant's prior reply
+$ctx.AddUserPrompt('Now explain it to a 5 year old')
+$result2 = New-FoundryChat -Context $ctx -Model 'qwen2.5-0.5b-instruct-generic-cpu'
+$result2.message.content
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `UserPrompt` | `string` | Yes | The initial user turn content. |
+| `SystemPrompt` | `string` | No | Overrides the default system prompt (`You are a helpful assistant`). |
+
+The object exposes the following methods:
+
+| Method | Description |
+|---|---|
+| `AddUserPrompt([string])` | Appends a new user turn to the conversation. |
+| `AddAssistantResponse([string])` | Appends an assistant turn to the conversation. Called automatically by `New-FoundryChat` after a successful `-Context` call. |
+| `GetMessages()` | Returns the full accumulated message history as an array of `{role; content}` hashtables. |
+
+---
+
 ### `Get-FoundryStatus`
 
 Returns the status of the local Foundry OpenAI-compatible endpoint.
@@ -218,22 +248,19 @@ Stop-FoundryWebServer
 
 ### `Save-FoundryModel`
 
-Downloads a model to the local Foundry service by posting a download request with the model URI, provider type, and model ID.
+Loads a model into the local Foundry service, downloading it first if it isn't already cached, by calling `GET /models/load/{name}`.
 The model ID must exist in the Foundry catalogue (`Get-FoundryModelList`) — a terminating error is thrown otherwise.
 
-> **Not available in Foundry Local v0.10.0+** — the `/openai/download` endpoint was removed in the new API.
-> A terminating error is thrown when this cmdlet is called against a v0.10.0+ service.
+> Foundry Local **0.10.0+** removed the separate download-by-URI endpoint (`/openai/download`); loading a model by name now handles both fetching and loading, so this cmdlet works the same way across CLI versions.
 
 ```powershell
-Save-FoundryModel -ModelID 'Phi-4-mini-instruct-generic-cpu:4' `
-                  -ModelURI 'azureml://registries/azureml/models/Phi-4-mini-instruct-generic-cpu/versions/4'
+Save-FoundryModel -ModelID 'Phi-4-mini-instruct-generic-cpu:4'
 ```
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `ModelURI` | `string` | Yes | — | Full URI of the model in the registry. |
-| `ProviderType` | `string` | No | `AzureFoundryLocal` | Provider type passed to the download API. |
 | `ModelID` | `string` | Yes | — | Model ID as it appears in `Get-FoundryModelList` (e.g. `Phi-4-mini-instruct-generic-cpu:4`). |
+| `Port` | `int` | No | — | Overrides the port used to reach the local Foundry service. |
 
 ---
 
@@ -246,6 +273,8 @@ Since Foundry Local **0.10.0**, the service no longer auto-loads a model on the 
 
 Pass the bare model ID (without the `:version` suffix) — both forms are accepted.
 
+Accepts either a single-turn `-Message` (from `New-FoundryMessage`) or a multi-turn `-Context` (from `New-FoundryChatContext`) — the two are mutually exclusive parameter sets.
+
 ```powershell
 $msg    = New-FoundryMessage -UserPrompt 'Write a haiku about PowerShell'
 $result = New-FoundryChat -Message $msg -Model 'qwen2.5-0.5b-instruct-generic-cpu'
@@ -255,9 +284,20 @@ $result.model             # model that handled the request
 $result.id                # completion ID
 ```
 
+Multi-turn, using a `FoundryChatContext` (see [`New-FoundryChatContext`](#new-foundrychatcontext)):
+
+```powershell
+$ctx    = New-FoundryChatContext -UserPrompt 'Write a haiku about PowerShell'
+$result = New-FoundryChat -Context $ctx -Model 'qwen2.5-0.5b-instruct-generic-cpu'
+
+$ctx.AddUserPrompt('Now write one about Bash')
+$result2 = New-FoundryChat -Context $ctx -Model 'qwen2.5-0.5b-instruct-generic-cpu'
+```
+
 | Parameter | Type | Required | Constraints | Description |
 |---|---|---|---|---|
-| `Message` | `FoundryMessage` | Yes | — | Message object from `New-FoundryMessage`. |
+| `Message` | `FoundryMessage` | Yes (ParameterSet `Message`) | — | Message object from `New-FoundryMessage`. Mutually exclusive with `Context`. |
+| `Context` | `FoundryChatContext` | Yes (ParameterSet `Context`) | — | Conversation object from `New-FoundryChatContext`. The assistant's reply is appended to it via `AddAssistantResponse` after a successful call, so the same object can be reused for the next turn. Mutually exclusive with `Message`. |
 | `Model` | `string` | Yes | — | Model ID from `Get-FoundryModelList` (e.g. `qwen2.5-0.5b-instruct-generic-cpu`). The `:version` suffix is optional. |
 | `Temperature` | `double` | No | 0.0 – 2.0 | Sampling temperature. |
 | `MaxTokens` | `int` | No | 1 – 2048 | Maximum tokens to generate. |
@@ -317,7 +357,7 @@ The module detects the active version via `Get-FoundryVersion` and automatically
 | Loaded models | `GET /openai/models` | `GET /models/loaded` |
 | Load a model | `POST /openai/load/{name}` | `GET /models/load/{name}` |
 | Unload a model | `POST /openai/unload/{name}` | `GET /models/unload/{name}` |
-| Download a model | `POST /openai/download` | *(removed — throws error)* |
+| Download a model | `POST /openai/download` | *(removed — use `Save-FoundryModel`, which now loads by name via `GET /models/load/{name}`)* |
 | Token count | `POST /v1/chat/completions/tokenizer/encode/count` | *(removed — throws error)* |
 | Chat completion | `POST /v1/chat/completions` | `POST /v1/chat/completions` *(unchanged)* |
 | Audio transcription | `POST /v1/audio/transcriptions` | `POST /v1/audio/transcriptions` *(unchanged)* |

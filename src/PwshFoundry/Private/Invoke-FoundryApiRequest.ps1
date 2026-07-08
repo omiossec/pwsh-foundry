@@ -13,7 +13,7 @@ function Invoke-FoundryApiRequest {
 
         [Parameter(Mandatory)]
         [ValidateSet('chat', 'transcribe', 'status', 'model-list', 'models-loaded',
-                     'model-load', 'model-unload', 'model-download', 'tokenizer')]
+                     'model-load', 'model-unload', 'tokenizer')]
         [string]$Action,
 
         [Parameter()]

@@ -5,8 +5,17 @@ function New-FoundryChat {
     .SYNOPSIS
         Sends a chat completion request to the local Foundry service.
     .DESCRIPTION
-        Builds an OpenAI-compatible chat completion body from a FoundryMessage object
-        and optional sampling parameters, then POSTs it to /v1/chat/completions.
+        Builds an OpenAI-compatible chat completion body from a FoundryMessage or
+        FoundryChatContext object and optional sampling parameters, then POSTs it to
+        /v1/chat/completions.
+    .PARAMETER Message
+        A single-turn FoundryMessage (system prompt + user prompt). Use this for one-off
+        calls that don't need conversation history.
+    .PARAMETER Context
+        A FoundryChatContext to use for multi-turn conversations. On a successful call the
+        assistant's reply is appended to the context via AddAssistantResponse, so the same
+        object can be passed back in on the next call (after calling AddUserPrompt) to keep
+        growing the conversation history sent to the model.
     .PARAMETER LogFilePath
         Optional path to a log file. When specified, the system prompt, user prompt, and
         assistant response are appended to this file via New-FoundryLogEntries. When
@@ -14,12 +23,20 @@ function New-FoundryChat {
     .EXAMPLE
         $msg    = New-FoundryMessage -UserPrompt 'Explain quantum computing'
         $result = New-FoundryChat -Message $msg -Model 'phi-3-mini'
+    .EXAMPLE
+        $ctx     = New-FoundryChatContext -UserPrompt 'Explain quantum computing'
+        $result  = New-FoundryChat -Context $ctx -Model 'phi-3-mini'
+        $ctx.AddUserPrompt('Now explain it to a 5 year old')
+        $result2 = New-FoundryChat -Context $ctx -Model 'phi-3-mini'
     #>
     [CmdletBinding()]
     [OutputType([object])]
     param(
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory, ParameterSetName = 'Message')]
         [FoundryMessage] $Message,
+
+        [Parameter(Mandatory, ParameterSetName = 'Context')]
+        [FoundryChatContext] $Context,
 
         [Parameter(Mandatory)]
         [string] $Model,
@@ -80,11 +97,13 @@ function New-FoundryChat {
         )
     }
 
+    $messages = if ($PSCmdlet.ParameterSetName -eq 'Context') { $Context.GetMessages() } else { $Message.GetMessages() }
+
     if ($CountTokenOnly) {
         # NOTE: This endpoint is not yet implemented in Foundry Local and currently returns HTTP 404.
         $body = @{
             model    = $Model
-            messages = $Message.GetMessages()
+            messages = $messages
         }
 
         Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
@@ -104,7 +123,7 @@ function New-FoundryChat {
 
         $body = @{
             model    = $Model
-            messages = $Message.GetMessages()
+            messages = $messages
         }
 
         if ($PSBoundParameters.ContainsKey('Temperature')) {
@@ -131,12 +150,23 @@ function New-FoundryChat {
         Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
         $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body
+        $assistantContent = $chat.choices[0].message.content
+
+        if ($PSCmdlet.ParameterSetName -eq 'Context') {
+            $Context.AddAssistantResponse($assistantContent)
+            $systemPrompt = $Context.SystemPrompt
+            $userPrompt   = ($messages | Where-Object { $_.role -eq 'user' } | Select-Object -Last 1).content
+        }
+        else {
+            $systemPrompt = $Message.SystemPrompt
+            $userPrompt   = $Message.UserPrompt
+        }
 
         $logParams = @{
             Model           = $Model
-            SystemPrompt    = $Message.SystemPrompt
-            UserPrompt      = $Message.UserPrompt
-            AssistantPrompt = $chat.choices[0].message.content
+            SystemPrompt    = $systemPrompt
+            UserPrompt      = $userPrompt
+            AssistantPrompt = $assistantContent
         }
         if ($PSBoundParameters.ContainsKey('LogFilePath')) {
             $logParams['LogFilePath'] = $LogFilePath
