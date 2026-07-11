@@ -9,7 +9,7 @@ function New-FoundryLogEntries {
     .PARAMETER Model
         Name of the Foundry model used for the interaction.
     .PARAMETER SystemPrompt
-        The system prompt sent to the model.
+        The system prompt sent to the model. Optional; defaults to an empty string.
     .PARAMETER UserPrompt
         The user prompt sent to the model.
     .PARAMETER AssistantPrompt
@@ -31,8 +31,8 @@ function New-FoundryLogEntries {
         [Parameter(Mandatory)]
         [string]$Model,
 
-        [Parameter(Mandatory)]
-        [string]$SystemPrompt,
+        [Parameter()]
+        [string]$SystemPrompt = '',
 
         [Parameter(Mandatory)]
         [string]$UserPrompt,

@@ -69,26 +69,30 @@ function New-FoundryAudioTranscription {
         )
     }
 
+    # The Foundry Local transcription handler (audio_transcriptions_handler.cc) only
+    # parses 'model', 'filename', and 'stream'; language/response_format/temperature
+    # from the OpenAI spec are not supported and would be silently ignored.
     $body = @{
-        model           = $ModelId
-        file            = (Resolve-Path -Path $AudioFile).Path
-        language        = $Language
-        response_format = $ResponseFormat
+        model    = $ModelId
+        filename = (Resolve-Path -Path $AudioFile).Path
     }
 
     if ($PSBoundParameters.ContainsKey('Temperature')) {
-        $body.temperature = $Temperature
+        Write-Warning "The local Foundry transcription endpoint does not support 'temperature'; the value will be ignored."
+    }
+    if ($PSBoundParameters.ContainsKey('Language') -or $PSBoundParameters.ContainsKey('ResponseFormat')) {
+        Write-Warning "The local Foundry transcription endpoint does not support 'language' or 'response_format'; these values will be ignored."
     }
 
-            # Since Foundry Local 0.10.0 the OpenAI-compatible chat endpoint no longer
-        # auto-loads models and returns 400 if the model is not loaded.
-        $loadedModels = @(Invoke-FoundryApiRequest -Action 'models-loaded' -Method GET)
-        $isLoaded = [bool]($loadedModels | Where-Object { $_ -eq $ModelId -or $_ -like "${ModelId}:*" })
+    # Since Foundry Local 0.10.0 the OpenAI-compatible chat endpoint no longer
+    # auto-loads models and returns 400 if the model is not loaded.
+    $loadedModels = @(Invoke-FoundryApiRequest -Action 'models-loaded' -Method GET)
+    $isLoaded = [bool]($loadedModels | Where-Object { $_ -eq $ModelId -or $_ -like "${ModelId}:*" })
 
-        if (-not $isLoaded) {
-            Write-Verbose "Model '$Model' is not loaded; loading it now (this can take a while)."
-            $null = Invoke-FoundryApiRequest -Action 'model-load' -Method GET -PathParameters @{ name = $Model }
-        }
+    if (-not $isLoaded) {
+        Write-Verbose "Model '$ModelId' is not loaded; loading it now (this can take a while)."
+        $null = Invoke-FoundryApiRequest -Action 'model-load' -Method GET -PathParameters @{ name = $ModelId }
+    }
 
     Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
