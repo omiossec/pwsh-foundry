@@ -6,55 +6,55 @@ BeforeAll {
 
 Describe 'New-FoundryAudioTranscription' {
 
-    Context 'Correct API call' {
+    Context 'Correct CLI call' {
         BeforeAll {
             $script:audioFile = Join-Path $TestDrive 'test.mp3'
             New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
-            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest { [PSCustomObject]@{ text = 'Hello world' } }
+            Mock -ModuleName PwshFoundry Invoke-FoundryCli { 'Hello world' }
         }
 
-        It 'calls /v1/audio/transcriptions with POST' {
+        It 'calls the transcribe subcommand' {
             New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile
-            Should -Invoke Invoke-FoundryApiRequest -ModuleName PwshFoundry -ParameterFilter {
-                $Path -eq '/v1/audio/transcriptions' -and $Method -eq 'POST'
+            Should -Invoke Invoke-FoundryCli -ModuleName PwshFoundry -ParameterFilter {
+                $Arguments[0] -eq 'transcribe'
             }
         }
 
-        It 'returns the API response' {
+        It 'returns the CLI response' {
             $result = New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile
-            $result.text | Should -Be 'Hello world'
+            $result | Should -Be 'Hello world'
         }
     }
 
-    Context 'Body composition - required fields' {
+    Context 'Argument composition - required fields' {
         BeforeAll {
             $script:audioFile = Join-Path $TestDrive 'recording.wav'
             New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
-            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
-                $script:capturedBody = $Body
-                [PSCustomObject]@{}
+            Mock -ModuleName PwshFoundry Invoke-FoundryCli {
+                $script:capturedArguments = $Arguments
+                'ok'
             }
             New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile
         }
 
-        It 'includes model' {
-            $script:capturedBody['model'] | Should -Be 'whisper-1'
+        It 'includes --model' {
+            $index = $script:capturedArguments.IndexOf('--model')
+            $script:capturedArguments[$index + 1] | Should -Be 'whisper-1'
         }
 
-        It 'includes the resolved file path' {
-            $script:capturedBody['file'] | Should -Be (Resolve-Path $script:audioFile).Path
+        It 'includes the resolved file path with --file' {
+            $index = $script:capturedArguments.IndexOf('--file')
+            $script:capturedArguments[$index + 1] | Should -Be (Resolve-Path $script:audioFile).Path
         }
 
-        It 'defaults language to en' {
-            $script:capturedBody['language'] | Should -Be 'en'
+        It 'defaults --language to en' {
+            $index = $script:capturedArguments.IndexOf('--language')
+            $script:capturedArguments[$index + 1] | Should -Be 'en'
         }
 
-        It 'defaults response_format to text' {
-            $script:capturedBody['response_format'] | Should -Be 'text'
-        }
-
-        It 'omits temperature when not supplied' {
-            $script:capturedBody.ContainsKey('temperature') | Should -BeFalse
+        It 'defaults --output to text' {
+            $index = $script:capturedArguments.IndexOf('--output')
+            $script:capturedArguments[$index + 1] | Should -Be 'text'
         }
     }
 
@@ -62,26 +62,22 @@ Describe 'New-FoundryAudioTranscription' {
         BeforeAll {
             $script:audioFile = Join-Path $TestDrive 'audio.flac'
             New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
-            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
-                $script:capturedBody = $Body
-                [PSCustomObject]@{}
+            Mock -ModuleName PwshFoundry Invoke-FoundryCli {
+                $script:capturedArguments = $Arguments
+                'ok'
             }
         }
 
         It 'includes language when supplied' {
             New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -Language 'fr'
-            $script:capturedBody['language'] | Should -Be 'fr'
+            $index = $script:capturedArguments.IndexOf('--language')
+            $script:capturedArguments[$index + 1] | Should -Be 'fr'
         }
 
-        It 'includes temperature when supplied' {
-            New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -Temperature 0.5
-            $script:capturedBody.ContainsKey('temperature') | Should -BeTrue
-            $script:capturedBody['temperature']             | Should -Be 0.5
-        }
-
-        It 'includes response_format when supplied' {
+        It 'includes response format when supplied' {
             New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -ResponseFormat 'json'
-            $script:capturedBody['response_format'] | Should -Be 'json'
+            $index = $script:capturedArguments.IndexOf('--output')
+            $script:capturedArguments[$index + 1] | Should -Be 'json'
         }
     }
 
@@ -89,7 +85,7 @@ Describe 'New-FoundryAudioTranscription' {
         BeforeAll {
             $script:audioFile = Join-Path $TestDrive 'model-check.mp3'
             New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
-            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest { [PSCustomObject]@{} }
+            Mock -ModuleName PwshFoundry Invoke-FoundryCli { 'ok' }
         }
 
         It 'accepts a model name with whisper (lowercase)' {
@@ -107,7 +103,7 @@ Describe 'New-FoundryAudioTranscription' {
 
     Context 'Parameter validation - AudioFile extension' {
         BeforeAll {
-            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest { [PSCustomObject]@{} }
+            Mock -ModuleName PwshFoundry Invoke-FoundryCli { 'ok' }
         }
 
         It 'accepts .mp3' {
@@ -155,35 +151,11 @@ Describe 'New-FoundryAudioTranscription' {
         }
     }
 
-    Context 'Parameter validation - Temperature range' {
-        BeforeAll {
-            $script:audioFile = Join-Path $TestDrive 'temp-range.mp3'
-            New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
-            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest { [PSCustomObject]@{} }
-        }
-
-        It 'accepts boundary value 0.0' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -Temperature 0.0 } | Should -Not -Throw
-        }
-
-        It 'accepts boundary value 1.0' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -Temperature 1.0 } | Should -Not -Throw
-        }
-
-        It 'throws when Temperature is below 0' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -Temperature -0.1 } | Should -Throw
-        }
-
-        It 'throws when Temperature is above 1' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -Temperature 1.1 } | Should -Throw
-        }
-    }
-
     Context 'Parameter validation - ResponseFormat' {
         BeforeAll {
             $script:audioFile = Join-Path $TestDrive 'fmt.mp3'
             New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
-            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest { [PSCustomObject]@{} }
+            Mock -ModuleName PwshFoundry Invoke-FoundryCli { 'ok' }
         }
 
         It 'accepts text' {
@@ -192,10 +164,6 @@ Describe 'New-FoundryAudioTranscription' {
 
         It 'accepts json' {
             { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -ResponseFormat 'json' } | Should -Not -Throw
-        }
-
-        It 'accepts verbose_json' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -ResponseFormat 'verbose_json' } | Should -Not -Throw
         }
 
         It 'throws for an invalid format value' {

@@ -74,6 +74,7 @@ FunctionsToExport = @(
     'Get-FoundryModelCache',
     'Get-FoundryModelList',
     'Get-FoundryStatus',
+    'Deploy-FoundryModel',
     'New-FoundryAudioTranscription',
     'New-FoundryChat',
     'New-FoundryChatContext',
