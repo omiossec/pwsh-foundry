@@ -99,89 +99,79 @@ function New-FoundryChat {
 
     $messages = if ($PSCmdlet.ParameterSetName -eq 'Context') { $Context.GetMessages() } else { $Message.GetMessages() }
 
+    # Since Foundry Local 0.10.0 the OpenAI-compatible chat endpoint no longer
+    # auto-loads models and returns 400 if the model is not loaded.
+    $loadedModels = @(Invoke-FoundryApiRequest -Action 'models-loaded' -Method GET)
+    $isLoaded = [bool]($loadedModels | Where-Object { $_ -eq $Model -or $_ -like "${Model}:*" })
+
+    if (-not $isLoaded) {
+        Write-Verbose "Model '$Model' is not loaded; loading it now (this can take a while)."
+        $null = Invoke-FoundryApiRequest -Action 'model-load' -Method GET -PathParameters @{ name = $Model }
+    }
+
+    $body = @{
+        model    = $Model
+        messages = $messages
+    }
+
+    if ($PSBoundParameters.ContainsKey('Temperature')) {
+        $body.temperature = $Temperature
+    }
+
+    if ($PSBoundParameters.ContainsKey('MaxTokens')) {
+        $body.max_tokens = $MaxTokens
+        $body.max_completion_tokens = $MaxTokens
+    }
+
+    if ($PSBoundParameters.ContainsKey('TopP')) {
+        $body.top_p = $TopP
+    }
+
+    if ($PSBoundParameters.ContainsKey('PresencePenalty')) {
+        $body.presence_penalty = $PresencePenalty
+    }
+
+    if ($PSBoundParameters.ContainsKey('FrequencyPenalty')) {
+        $body.frequency_penalty = $FrequencyPenalty
+    }
+
+    Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
+
+    $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body
+
     if ($CountTokenOnly) {
-        # NOTE: This endpoint is not yet implemented in Foundry Local and currently returns HTTP 404.
-        $body = @{
-            model    = $Model
-            messages = $messages
-        }
+        return $chat.usage
+    }
 
-        Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
+    $assistantContent = $chat.choices[0].message.content
 
-        return Invoke-FoundryApiRequest -Action 'tokenizer' -Method POST -Body $body
+    if ($PSCmdlet.ParameterSetName -eq 'Context') {
+        $Context.AddAssistantResponse($assistantContent)
+        $systemPrompt = $Context.SystemPrompt
+        $userPrompt   = ($messages | Where-Object { $_.role -eq 'user' } | Select-Object -Last 1).content
     }
     else {
-        # Since Foundry Local 0.10.0 the OpenAI-compatible chat endpoint no longer
-        # auto-loads models and returns 400 if the model is not loaded.
-        $loadedModels = @(Invoke-FoundryApiRequest -Action 'models-loaded' -Method GET)
-        $isLoaded = [bool]($loadedModels | Where-Object { $_ -eq $Model -or $_ -like "${Model}:*" })
-
-        if (-not $isLoaded) {
-            Write-Verbose "Model '$Model' is not loaded; loading it now (this can take a while)."
-            $null = Invoke-FoundryApiRequest -Action 'model-load' -Method GET -PathParameters @{ name = $Model }
-        }
-
-        $body = @{
-            model    = $Model
-            messages = $messages
-        }
-
-        if ($PSBoundParameters.ContainsKey('Temperature')) {
-            $body.temperature = $Temperature
-        }
-
-        if ($PSBoundParameters.ContainsKey('MaxTokens')) {
-            $body.max_tokens = $MaxTokens
-            $body.max_completion_tokens = $MaxTokens
-        }
-
-        if ($PSBoundParameters.ContainsKey('TopP')) {
-            $body.top_p = $TopP
-        }
-
-        if ($PSBoundParameters.ContainsKey('PresencePenalty')) {
-            $body.presence_penalty = $PresencePenalty
-        }
-
-        if ($PSBoundParameters.ContainsKey('FrequencyPenalty')) {
-            $body.frequency_penalty = $FrequencyPenalty
-        }
-
-        Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
-
-        $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body
-        $assistantContent = $chat.choices[0].message.content
-
-        if ($PSCmdlet.ParameterSetName -eq 'Context') {
-            $Context.AddAssistantResponse($assistantContent)
-            $systemPrompt = $Context.SystemPrompt
-            $userPrompt   = ($messages | Where-Object { $_.role -eq 'user' } | Select-Object -Last 1).content
-        }
-        else {
-            $systemPrompt = $Message.SystemPrompt
-            $userPrompt   = $Message.UserPrompt
-        }
-
-        $logParams = @{
-            Model           = $Model
-            SystemPrompt    = $systemPrompt
-            UserPrompt      = $userPrompt
-            AssistantPrompt = $assistantContent
-        }
-        if ($PSBoundParameters.ContainsKey('LogFilePath')) {
-            $logParams['LogFilePath'] = $LogFilePath
-        }
-        New-FoundryLogEntries @logParams
-
-        return [PSCustomObject]@{
-            id         = $chat.id
-            object     = $chat.object
-            model      = $chat.model
-            message    = $chat.choices[0].message
-            successful = $chat.successful
-        }
-
+        $systemPrompt = $Message.SystemPrompt
+        $userPrompt   = $Message.UserPrompt
     }
 
+    $logParams = @{
+        Model           = $Model
+        SystemPrompt    = $systemPrompt
+        UserPrompt      = $userPrompt
+        AssistantPrompt = $assistantContent
+    }
+    if ($PSBoundParameters.ContainsKey('LogFilePath')) {
+        $logParams['LogFilePath'] = $LogFilePath
+    }
+    New-FoundryLogEntries @logParams
 
+    return [PSCustomObject]@{
+        id         = $chat.id
+        object     = $chat.object
+        model      = $chat.model
+        message    = $chat.choices[0].message
+        usage      = $chat.usage
+        successful = $chat.successful
+    }
 }

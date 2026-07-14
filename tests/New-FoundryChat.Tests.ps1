@@ -28,6 +28,11 @@ Describe 'New-FoundryChat' {
                     object     = 'chat.completion'
                     model      = 'phi-3-mini'
                     successful = $true
+                    usage      = [PSCustomObject]@{
+                        prompt_tokens     = 2114
+                        completion_tokens = 1678
+                        total_tokens      = 3792
+                    }
                     choices    = @(
                         [PSCustomObject]@{
                             message = [PSCustomObject]@{
@@ -62,8 +67,53 @@ Describe 'New-FoundryChat' {
             $script:result.message.content | Should -Be 'Hello!'
         }
 
+        It 'maps usage from the API response' {
+            $script:result.usage.prompt_tokens     | Should -Be 2114
+            $script:result.usage.completion_tokens | Should -Be 1678
+            $script:result.usage.total_tokens      | Should -Be 3792
+        }
+
         It 'returns a PSCustomObject' {
             $script:result.GetType().Name | Should -Be 'PSCustomObject'
+        }
+    }
+
+    Context 'CountTokenOnly switch' {
+        BeforeAll {
+            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
+                [PSCustomObject]@{
+                    id         = 'chatcmpl-abc123'
+                    object     = 'chat.completion'
+                    model      = 'phi-3-mini'
+                    successful = $true
+                    usage      = [PSCustomObject]@{
+                        prompt_tokens     = 2114
+                        completion_tokens = 1678
+                        total_tokens      = 3792
+                    }
+                    choices    = @(
+                        [PSCustomObject]@{
+                            message = [PSCustomObject]@{
+                                role    = 'assistant'
+                                content = 'Hello!'
+                            }
+                        }
+                    )
+                }
+            }
+            $script:result = New-FoundryChat -Message $script:message -Model 'phi-3-mini' -CountTokenOnly
+        }
+
+        It 'returns only the usage object' {
+            $script:result.prompt_tokens     | Should -Be 2114
+            $script:result.completion_tokens | Should -Be 1678
+            $script:result.total_tokens      | Should -Be 3792
+        }
+
+        It 'does not call the log function' {
+            Should -Invoke Invoke-FoundryApiRequest -ModuleName PwshFoundry -ParameterFilter {
+                $Path -eq '/v1/chat/completions' -and $Method -eq 'POST'
+            }
         }
     }
 
