@@ -305,8 +305,16 @@ $result2 = New-FoundryChat -Context $ctx -Model 'qwen2.5-0.5b-instruct-generic-c
 | `PresencePenalty` | `double` | No | -2.0 – 2.0 | Penalises tokens already present in the context. |
 | `FrequencyPenalty` | `double` | No | -2.0 – 2.0 | Penalises tokens by their frequency in the context. |
 | `User` | `string` | No | default: `pwshChat` | End-user identifier forwarded to the API. |
-| `CountTokenOnly` | `switch` | No | — | Posts to the token-count endpoint instead of generating a completion. **Removed in Foundry Local v0.10.0+** — throws a terminating error on newer services. Was `/v1/chat/completions/tokenizer/encode/count` on older versions. |
+| `CountTokenOnly` | `switch` | No | — | Sends the same chat completion request but returns only the `usage` object (`prompt_tokens`, `completion_tokens`, `total_tokens`) instead of the full mapped result. No separate log entry is written in this mode. |
 | `LogFilePath` | `string` | No | default: temp folder | Path to a log file. When the request completes, the system prompt, user prompt, and assistant response are appended to it as a JSON-line entry via `New-FoundryLogEntries`. If omitted, entries are logged to `PwshFoundry_ChatLog.jsonl` in the current user's temp directory. An invalid path (or one whose parent directory doesn't exist) throws a terminating error before any request is sent. Not applied when `-CountTokenOnly` is used. |
+
+```powershell
+# Get only the token usage for a request
+$usage = New-FoundryChat -Message $msg -Model 'qwen2.5-0.5b-instruct-generic-cpu' -CountTokenOnly
+$usage.prompt_tokens
+$usage.completion_tokens
+$usage.total_tokens
+```
 
 The returned `PSCustomObject` has the following properties:
 
@@ -316,13 +324,16 @@ The returned `PSCustomObject` has the following properties:
 | `object` | `$response.object` |
 | `model` | `$response.model` |
 | `message` | `$response.choices[0].message` |
+| `usage` | `$response.usage` — `{ prompt_tokens; completion_tokens; total_tokens }` |
 | `successful` | `$response.successful` |
 
 ---
 
 ### `New-FoundryAudioTranscription`
 
-Transcribes an audio file to text using a local Foundry Whisper model, via the `/v1/audio/transcriptions` endpoint.
+Transcribes an audio file to text using a local Foundry Whisper model by shelling out to `foundry transcribe`.
+
+> This function uses the Foundry CLI directly — the local audio transcriptions REST endpoint is not used.
 
 > **Requires Foundry Local v1.1.0**, installed manually — see the CLI version notice at the top of this document.
 
@@ -339,9 +350,10 @@ New-FoundryAudioTranscription -ModelId 'whisper-large-v3' -AudioFile './intervie
 | `ModelId` | `string` | Yes | — | Whisper model ID (must match `whisper`, case-insensitive). |
 | `AudioFile` | `string` | Yes | — | Path to the audio file. Must exist and have a `.mp3`, `.wav`, `.flac`, `.ogg`, or `.webm` extension. |
 | `Language` | `string` | No | `en` | Source language hint passed to the model. |
-| `Temperature` | `double` | No | — | Sampling temperature, `0.0`–`1.0`. |
-| `ResponseFormat` | `string` | No | `text` | One of `text`, `json`, `verbose_json`. |
+| `ResponseFormat` | `string` | No | `text` | One of `text`, `json`. |
 | `LogFilePath` | `string` | No | default: temp folder | Path to a log file. When the request completes, an entry is appended via `New-FoundryLogEntries` recording the model, the audio file/language as the "user prompt", and the transcription result as the "assistant response". If omitted, entries are logged to `PwshFoundry_ChatLog.jsonl` in the current user's temp directory. An invalid path throws a terminating error before any request is sent. |
+
+Returns the raw transcription: a string when `-ResponseFormat text` (the default), or a parsed JSON object when `-ResponseFormat json`.
 
 ---
 
@@ -358,8 +370,8 @@ The module detects the active version via `Get-FoundryVersion` and automatically
 | Load a model | `POST /openai/load/{name}` | `GET /models/load/{name}` |
 | Unload a model | `POST /openai/unload/{name}` | `GET /models/unload/{name}` |
 | Download a model | `POST /openai/download` | *(removed — use `Save-FoundryModel`, which now loads by name via `GET /models/load/{name}`)* |
-| Token count | `POST /v1/chat/completions/tokenizer/encode/count` | *(removed — throws error)* |
-| Chat completion | `POST /v1/chat/completions` | `POST /v1/chat/completions` *(unchanged)* |
+| Token count | `POST /v1/chat/completions/tokenizer/encode/count` | *(removed — `New-FoundryChat -CountTokenOnly` now reads the `usage` field returned by the chat completion endpoint instead)* |
+| Chat completion | `POST /v1/chat/completions` | `POST /v1/chat/completions` *(unchanged; response now includes a `usage` field)* |
 | Audio transcription | `POST /v1/audio/transcriptions` | `POST /v1/audio/transcriptions` *(unchanged)* |
 
 SDK mode (CLI absent) is treated as `≥ 0.10.0` and uses the new paths.
