@@ -34,8 +34,8 @@ while ($true) {
         $context.AddUserPrompt($prompt)
     }
 
+    # New-FoundryChat adds the assistant response to $context internally when -Context is used.
     $result = New-FoundryChat -Context $context -Model $Model
-    $context.AddAssistantResponse($result.message.content)
 
     Write-Output "Assistant: $($result.message.content)"
 }
