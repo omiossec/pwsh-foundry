@@ -12,7 +12,7 @@
 RootModule = 'PwshFoundry.psm1'
 
 # Version number of this module.
-ModuleVersion = '0.1.10'
+ModuleVersion = '0.2.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -79,6 +79,7 @@ FunctionsToExport = @(
     'New-FoundryChat',
     'New-FoundryChatContext',
     'New-FoundryMessage',
+    'New-FoundryTool',
     'Save-FoundryModel',
     'Start-FoundryWebServer',
     'Stop-FoundryWebServer'

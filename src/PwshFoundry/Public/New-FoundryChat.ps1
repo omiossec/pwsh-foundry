@@ -20,6 +20,21 @@ function New-FoundryChat {
         Optional path to a log file. When specified, the system prompt, user prompt, and
         assistant response are appended to this file via New-FoundryLogEntries. When
         omitted, New-FoundryLogEntries logs to its default location.
+    .PARAMETER Tools
+        One or more FoundryTool objects (created with New-FoundryTool) the model is allowed
+        to call. When the model responds with tool calls, each tool's handler is invoked
+        with the model-provided arguments, the results are appended as tool messages, and
+        the request is re-sent until the model produces a final answer (or MaxToolRounds
+        is reached).
+    .PARAMETER ToolChoice
+        Controls how the model uses the supplied tools: 'auto' (model decides), 'none',
+        'required', or the name of one of the Tools to force that specific call. Small
+        local models often need a forced tool name to emit structured tool calls. Applies
+        to the first request only; follow-up requests after tool execution revert to
+        automatic so the model can produce a final answer.
+    .PARAMETER MaxToolRounds
+        Maximum number of tool-execution rounds before the model is forced to answer
+        (tools are omitted from the final request). Defaults to 5.
     .EXAMPLE
         $msg    = New-FoundryMessage -UserPrompt 'Explain quantum computing'
         $result = New-FoundryChat -Message $msg -Model 'phi-3-mini'
@@ -28,6 +43,11 @@ function New-FoundryChat {
         $result  = New-FoundryChat -Context $ctx -Model 'phi-3-mini'
         $ctx.AddUserPrompt('Now explain it to a 5 year old')
         $result2 = New-FoundryChat -Context $ctx -Model 'phi-3-mini'
+    .EXAMPLE
+        $tool = New-FoundryTool -Name 'Get-CurrentTime' -Description 'Returns the current local time' `
+            -Handler { (Get-Date).ToString('o') }
+        $ctx    = New-FoundryChatContext -UserPrompt 'What time is it right now?'
+        $result = New-FoundryChat -Context $ctx -Model 'phi-3-mini' -Tools $tool
     #>
     [CmdletBinding()]
     [OutputType([object])]
@@ -68,7 +88,17 @@ function New-FoundryChat {
         [switch] $CountTokenOnly,
 
         [Parameter()]
-        [string] $LogFilePath
+        [string] $LogFilePath,
+
+        [Parameter()]
+        [FoundryTool[]] $Tools,
+
+        [Parameter()]
+        [string] $ToolChoice,
+
+        [Parameter()]
+        [ValidateRange(1, 10)]
+        [int] $MaxToolRounds = 5
     )
 
     if (-not (Test-FoundryModelName -ModelName $Model)) {
@@ -135,9 +165,90 @@ function New-FoundryChat {
         $body.frequency_penalty = $FrequencyPenalty
     }
 
+    if ($PSBoundParameters.ContainsKey('Tools')) {
+        $body.tools = @($Tools | ForEach-Object { $_.ToRequestObject() })
+
+        if ($PSBoundParameters.ContainsKey('ToolChoice')) {
+            if ($ToolChoice -in @('auto', 'none', 'required')) {
+                $body.tool_choice = $ToolChoice
+            }
+            elseif ($Tools.Name -contains $ToolChoice) {
+                $body.tool_choice = @{ type = 'function'; function = @{ name = $ToolChoice } }
+            }
+            else {
+                $PSCmdlet.ThrowTerminatingError(
+                    [System.Management.Automation.ErrorRecord]::new(
+                        [System.ArgumentException]::new(
+                            "ToolChoice '$ToolChoice' must be 'auto', 'none', 'required', or the name of one of the supplied Tools."
+                        ),
+                        'FoundryInvalidToolChoice',
+                        [System.Management.Automation.ErrorCategory]::InvalidArgument,
+                        $ToolChoice
+                    )
+                )
+            }
+        }
+    }
+
     Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
     $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body
+
+    if ($PSBoundParameters.ContainsKey('Tools')) {
+        $round = 0
+
+        while ($round -lt $MaxToolRounds -and
+               $chat.choices[0].finish_reason -eq 'tool_calls' -and
+               $chat.choices[0].message.tool_calls) {
+
+            $round++
+            $toolCalls = $chat.choices[0].message.tool_calls
+
+            $messages = @($messages) + @{ role = 'assistant'; content = $null; tool_calls = $toolCalls }
+            if ($PSCmdlet.ParameterSetName -eq 'Context') {
+                $Context.AddAssistantToolCalls($toolCalls)
+            }
+
+            foreach ($call in $toolCalls) {
+                $toolName = $call.function.name
+                $tool     = $Tools | Where-Object { $_.Name -eq $toolName } | Select-Object -First 1
+
+                $toolResult = if ($null -eq $tool) {
+                    "Unknown tool '$toolName'."
+                }
+                else {
+                    $toolArguments = if ([string]::IsNullOrWhiteSpace($call.function.arguments)) {
+                        @{}
+                    }
+                    else {
+                        $call.function.arguments | ConvertFrom-Json -AsHashtable
+                    }
+
+                    Write-Verbose "Invoking tool '$toolName' with arguments: $($call.function.arguments)"
+                    $tool.Invoke($toolArguments)
+                }
+
+                $messages = @($messages) + @{ role = 'tool'; tool_call_id = $call.id; content = $toolResult }
+                if ($PSCmdlet.ParameterSetName -eq 'Context') {
+                    $Context.AddToolResult($call.id, $toolResult)
+                }
+            }
+
+            $body.messages = $messages
+
+            # A forced tool_choice must not apply to follow-up requests, or the model
+            # would be forced to call the tool again instead of answering.
+            $body.Remove('tool_choice')
+
+            # On the last allowed round, drop the tools so the model must answer.
+            if ($round -ge $MaxToolRounds) {
+                $body.Remove('tools')
+            }
+
+            Write-Verbose "Tool round ${round}: re-sending request with $($toolCalls.Count) tool result(s)."
+            $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body
+        }
+    }
 
     if ($CountTokenOnly) {
         return $chat.usage
@@ -146,7 +257,10 @@ function New-FoundryChat {
     $assistantContent = $chat.choices[0].message.content
 
     if ($PSCmdlet.ParameterSetName -eq 'Context') {
-        $Context.AddAssistantResponse($assistantContent)
+        # A tool-calls-only final response has no text content; the context guard rejects empty strings.
+        if (-not [string]::IsNullOrWhiteSpace($assistantContent)) {
+            $Context.AddAssistantResponse($assistantContent)
+        }
         $systemPrompt = $Context.SystemPrompt
         $userPrompt   = ($messages | Where-Object { $_.role -eq 'user' } | Select-Object -Last 1).content
     }
@@ -155,23 +269,26 @@ function New-FoundryChat {
         $userPrompt   = $Message.UserPrompt
     }
 
-    $logParams = @{
-        Model           = $Model
-        SystemPrompt    = $systemPrompt
-        UserPrompt      = $userPrompt
-        AssistantPrompt = $assistantContent
+    if (-not [string]::IsNullOrWhiteSpace($assistantContent)) {
+        $logParams = @{
+            Model           = $Model
+            SystemPrompt    = $systemPrompt
+            UserPrompt      = $userPrompt
+            AssistantPrompt = $assistantContent
+        }
+        if ($PSBoundParameters.ContainsKey('LogFilePath')) {
+            $logParams['LogFilePath'] = $LogFilePath
+        }
+        New-FoundryLogEntries @logParams
     }
-    if ($PSBoundParameters.ContainsKey('LogFilePath')) {
-        $logParams['LogFilePath'] = $LogFilePath
-    }
-    New-FoundryLogEntries @logParams
 
     return [PSCustomObject]@{
-        id         = $chat.id
-        object     = $chat.object
-        model      = $chat.model
-        message    = $chat.choices[0].message
-        usage      = $chat.usage
-        successful = $chat.successful
+        id            = $chat.id
+        object        = $chat.object
+        model         = $chat.model
+        message       = $chat.choices[0].message
+        usage         = $chat.usage
+        successful    = $chat.successful
+        finish_reason = $chat.choices[0].finish_reason
     }
 }

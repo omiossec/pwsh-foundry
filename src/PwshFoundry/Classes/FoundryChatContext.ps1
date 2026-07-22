@@ -62,6 +62,28 @@ class FoundryChatContext {
         $this.Messages.Add(@{ role = 'assistant'; content = $assistantResponse })
     }
 
+    [void] AddAssistantToolCalls([object]$toolCalls) {
+        if ($null -eq $toolCalls) {
+            throw [System.ArgumentException]::new(
+                'Tool calls cannot be null.',
+                'toolCalls'
+            )
+        }
+
+        $this.Messages.Add(@{ role = 'assistant'; content = $null; tool_calls = $toolCalls })
+    }
+
+    [void] AddToolResult([string]$toolCallId, [string]$content) {
+        if ([string]::IsNullOrWhiteSpace($toolCallId)) {
+            throw [System.ArgumentException]::new(
+                'Tool call id cannot be null or empty.',
+                'toolCallId'
+            )
+        }
+
+        $this.Messages.Add(@{ role = 'tool'; tool_call_id = $toolCallId; content = $content })
+    }
+
     [hashtable[]] GetMessages() {
         return $this.Messages.ToArray()
     }
