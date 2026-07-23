@@ -1,6 +1,6 @@
 # pwsh-foundry
 
-**PwshFoundry** is a PowerShell module (v0.1.10, alpha) that wraps the [Microsoft Foundry Local](https://github.com/microsoft/foundry-local) CLI and REST API so that PowerShell users and automation scripts can interact with local AI workloads without dropping into raw `afoundry` commands or hand-crafting HTTP requests.
+**PwshFoundry** is a PowerShell module (v0.2.0, alpha) that wraps the [Microsoft Foundry Local](https://github.com/microsoft/foundry-local) CLI and REST API so that PowerShell users and automation scripts can interact with local AI workloads without dropping into raw `afoundry` commands or hand-crafting HTTP requests.
 
 > **Alpha notice** — the API surface is unstable and breaking changes may occur between releases.
 
@@ -196,7 +196,45 @@ The object exposes the following methods:
 |---|---|
 | `AddUserPrompt([string])` | Appends a new user turn to the conversation. |
 | `AddAssistantResponse([string])` | Appends an assistant turn to the conversation. Called automatically by `New-FoundryChat` after a successful `-Context` call. |
-| `GetMessages()` | Returns the full accumulated message history as an array of `{role; content}` hashtables. |
+| `AddAssistantToolCalls([object])` | Appends an assistant turn requesting tool calls (`content = $null`, `tool_calls = ...`). Called automatically by `New-FoundryChat` when the model requests tools and `-Context` is used. |
+| `AddToolResult([string] toolCallId, [string] content)` | Appends a tool result turn (`role = 'tool'`) for the given `tool_call_id`. Called automatically by `New-FoundryChat` after running a tool handler when `-Context` is used. |
+| `GetMessages()` | Returns the full accumulated message history as an array of hashtables (`{role; content}`, plus `tool_calls` or `tool_call_id` on tool turns). |
+
+---
+
+### `New-FoundryTool`
+
+Creates a `FoundryTool` object describing a function the model can call. Pass one or more to `New-FoundryChat -Tools` to enable function calling: when the model requests a tool, the handler is invoked with the model-provided arguments as named parameters, and the result is sent back to the model automatically.
+
+```powershell
+$tool = New-FoundryTool -Name 'Get-CurrentTime' `
+    -Description 'Returns the current local date and time.' `
+    -Handler { (Get-Date).ToString('o') }
+
+$tool = New-FoundryTool -Name 'Get-VnetPeeringStatus' `
+    -Description 'Returns the peering status of an Azure VNet' `
+    -Parameters @{
+        VnetName      = @{ type = 'string'; description = 'Name of the VNet' }
+        ResourceGroup = @{ type = 'string'; description = 'Resource group of the VNet' }
+    } `
+    -Required 'VnetName', 'ResourceGroup' `
+    -Handler { param($VnetName, $ResourceGroup) Get-VnetPeeringStatus @PSBoundParameters }
+```
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `Name` | `string` | Yes | — | The function name exposed to the model. |
+| `Description` | `string` | Yes | — | Description used by the model to decide when to call the tool. |
+| `Parameters` | `hashtable` | No | `@{}` | JSON-schema property definitions, keyed by parameter name. |
+| `Required` | `string[]` | No | `@()` | Names of parameters the model must always provide. Each must exist as a key in `Parameters`. |
+| `Handler` | `scriptblock` | Yes | — | Executed when the model calls the tool; model-provided arguments are splatted as named parameters. Exceptions are caught and returned to the model as an error string instead of throwing. |
+
+The object exposes the following methods:
+
+| Method | Description |
+|---|---|
+| `ToRequestObject()` | Returns the OpenAI-compatible `tools` array entry (`{type; function: {name; description; parameters}}`). Called automatically by `New-FoundryChat`. |
+| `Invoke([hashtable])` | Runs `Handler` with the given arguments and returns a string result (non-string output is JSON-encoded). Never throws. |
 
 ---
 
@@ -294,6 +332,20 @@ $ctx.AddUserPrompt('Now write one about Bash')
 $result2 = New-FoundryChat -Context $ctx -Model 'qwen2.5-0.5b-instruct-generic-cpu'
 ```
 
+Tool calling, using one or more `FoundryTool` objects (see [`New-FoundryTool`](#new-foundrytool)):
+
+```powershell
+$tool = New-FoundryTool -Name 'Get-CurrentTime' -Description 'Returns the current local time' `
+    -Handler { (Get-Date).ToString('o') }
+
+$ctx    = New-FoundryChatContext -UserPrompt 'What time is it right now?'
+$result = New-FoundryChat -Context $ctx -Model 'Phi-4-mini-instruct-generic-gpu' -Tools $tool -ToolChoice 'Get-CurrentTime'
+
+$result.message.content   # final answer, after the tool ran and its result was sent back to the model
+```
+
+> Small local models often don't emit structured tool calls from `-Tools` alone — force the first call with `-ToolChoice '<tool name>'` and let follow-up requests fall back to automatic (the module handles this for you).
+
 | Parameter | Type | Required | Constraints | Description |
 |---|---|---|---|---|
 | `Message` | `FoundryMessage` | Yes (ParameterSet `Message`) | — | Message object from `New-FoundryMessage`. Mutually exclusive with `Context`. |
@@ -307,6 +359,9 @@ $result2 = New-FoundryChat -Context $ctx -Model 'qwen2.5-0.5b-instruct-generic-c
 | `User` | `string` | No | default: `pwshChat` | End-user identifier forwarded to the API. |
 | `CountTokenOnly` | `switch` | No | — | Posts to the token-count endpoint instead of generating a completion. **Removed in Foundry Local v0.10.0+** — throws a terminating error on newer services. Was `/v1/chat/completions/tokenizer/encode/count` on older versions. |
 | `LogFilePath` | `string` | No | default: temp folder | Path to a log file. When the request completes, the system prompt, user prompt, and assistant response are appended to it as a JSON-line entry via `New-FoundryLogEntries`. If omitted, entries are logged to `PwshFoundry_ChatLog.jsonl` in the current user's temp directory. An invalid path (or one whose parent directory doesn't exist) throws a terminating error before any request is sent. Not applied when `-CountTokenOnly` is used. |
+| `Tools` | `FoundryTool[]` | No | — | One or more tools (from `New-FoundryTool`) the model may call. When the model responds with tool calls, each handler is invoked and the results are sent back automatically until the model produces a final answer or `MaxToolRounds` is reached. |
+| `ToolChoice` | `string` | No | — | `'auto'`, `'none'`, `'required'`, or the name of one of `Tools` to force that specific call on the first request. Follow-up requests after tool execution always revert to automatic. Requires `Tools`. |
+| `MaxToolRounds` | `int` | No | 1 – 10, default `5` | Maximum number of tool-execution rounds before `Tools` is omitted from the request, forcing the model to answer. |
 
 The returned `PSCustomObject` has the following properties:
 
@@ -316,7 +371,9 @@ The returned `PSCustomObject` has the following properties:
 | `object` | `$response.object` |
 | `model` | `$response.model` |
 | `message` | `$response.choices[0].message` |
+| `usage` | `$response.usage` |
 | `successful` | `$response.successful` |
+| `finish_reason` | `$response.choices[0].finish_reason` (e.g. `'stop'`, `'tool_calls'`, `'length'`) |
 
 ---
 
@@ -363,6 +420,12 @@ The module detects the active version via `Get-FoundryVersion` and automatically
 | Audio transcription | `POST /v1/audio/transcriptions` | `POST /v1/audio/transcriptions` *(unchanged)* |
 
 SDK mode (CLI absent) is treated as `≥ 0.10.0` and uses the new paths.
+
+---
+
+## Samples
+
+The [`samples/`](samples/) directory has runnable scripts demonstrating common usage patterns, including an interactive chat REPL (`interactive-chat.ps1`) and a function-calling demo (`tool-calling-demo.ps1`). See [`samples/README.md`](samples/README.md) for the full list.
 
 ---
 
