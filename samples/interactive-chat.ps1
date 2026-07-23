@@ -6,7 +6,7 @@
 
 param(
     [Parameter()]
-    [string] $Model = 'phi-4-mini',
+    [string] $Model = 'Phi-4-mini-instruct-generic-gpu',
 
     [Parameter()]
     [string] $SystemPrompt = 'You are a helpful assistant'
