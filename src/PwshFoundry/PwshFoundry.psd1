@@ -70,6 +70,7 @@ PowerShellVersion = '7.4'
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
 FunctionsToExport = @(
+    'Compare-FoundryEmbedding',
     'Get-FoundryVersion',
     'Get-FoundryModelCache',
     'Get-FoundryModelList',
@@ -78,6 +79,7 @@ FunctionsToExport = @(
     'New-FoundryAudioTranscription',
     'New-FoundryChat',
     'New-FoundryChatContext',
+    'New-FoundryEmbedding',
     'New-FoundryMessage',
     'New-FoundryTool',
     'Save-FoundryModel',

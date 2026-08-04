@@ -402,6 +402,62 @@ New-FoundryAudioTranscription -ModelId 'whisper-large-v3' -AudioFile './intervie
 
 ---
 
+### `New-FoundryEmbedding`
+
+Creates embedding vectors for one or more texts using a local Foundry embedding model (e.g. `qwen3-embedding-0.6b`, `qwen3-embedding-8b`), via the `/v1/embeddings` endpoint.
+
+Embedding models don't support chat completions — use this cmdlet instead of `New-FoundryChat` for them. As with `New-FoundryChat`, the requested model is loaded automatically if it isn't already loaded.
+
+`-Text` accepts an array or pipeline input; all texts are batched into a single API request and one result object is emitted per input.
+
+```powershell
+New-FoundryEmbedding -Model 'qwen3-embedding-0.6b' -Text 'PowerShell is a shell and scripting language'
+
+# Batch multiple texts, including via the pipeline
+$vectors = 'first document', 'second document' | New-FoundryEmbedding -Model 'qwen3-embedding-0.6b'
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `Text` | `string[]` | Yes | One or more texts to embed. Accepts pipeline input; piped strings are batched into a single request. |
+| `Model` | `string` | Yes | ID of a local Foundry embedding model. The `:version` suffix is optional. |
+
+The returned `PSCustomObject` (one per input text) has the following properties:
+
+| Property | Description |
+|---|---|
+| `Index` | Zero-based position of the text within the batch. |
+| `Text` | The input text this embedding corresponds to. |
+| `Embedding` | The embedding vector as `double[]`. |
+| `Model` | Model that produced the embedding. |
+| `Usage` | Token usage object from the API response. |
+
+---
+
+### `Compare-FoundryEmbedding`
+
+Computes the cosine similarity between two embedding vectors — no API call is made, this is pure math. Returns a `double` between `-1` (opposite) and `1` (identical direction); `0` means unrelated.
+
+Accepts either raw `double[]` vectors or the objects emitted by `New-FoundryEmbedding` (the `Embedding` property is unwrapped automatically), so the two forms can be mixed.
+
+```powershell
+$a = New-FoundryEmbedding -Model 'qwen3-embedding-0.6b' -Text 'the cat sat on the mat'
+$b = New-FoundryEmbedding -Model 'qwen3-embedding-0.6b' -Text 'a feline rested on the rug'
+
+Compare-FoundryEmbedding -ReferenceEmbedding $a -DifferenceEmbedding $b
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ReferenceEmbedding` | `object` | Yes | First embedding vector, or a `New-FoundryEmbedding` result object. |
+| `DifferenceEmbedding` | `object` | Yes | Second embedding vector, or a `New-FoundryEmbedding` result object. |
+
+Throws a terminating error (`FoundryEmbeddingLengthMismatch`) if the two vectors are empty or of different lengths.
+
+> See [`samples/embedding-search.ps1`](samples/embedding-search.ps1) for a semantic-search demo that embeds a text corpus once and ranks it against user queries.
+
+---
+
 ## API endpoint changes (v0.10.0)
 
 Foundry Local CLI **0.10.0** (SDK **1.10**) reorganised the REST API.
@@ -418,6 +474,7 @@ The module detects the active version via `Get-FoundryVersion` and automatically
 | Token count | `POST /v1/chat/completions/tokenizer/encode/count` | *(removed — throws error)* |
 | Chat completion | `POST /v1/chat/completions` | `POST /v1/chat/completions` *(unchanged)* |
 | Audio transcription | `POST /v1/audio/transcriptions` | `POST /v1/audio/transcriptions` *(unchanged)* |
+| Embeddings | *(not available)* | `POST /v1/embeddings` |
 
 SDK mode (CLI absent) is treated as `≥ 0.10.0` and uses the new paths.
 
@@ -425,7 +482,7 @@ SDK mode (CLI absent) is treated as `≥ 0.10.0` and uses the new paths.
 
 ## Samples
 
-The [`samples/`](samples/) directory has runnable scripts demonstrating common usage patterns, including an interactive chat REPL (`interactive-chat.ps1`) and a function-calling demo (`tool-calling-demo.ps1`). See [`samples/README.md`](samples/README.md) for the full list.
+The [`samples/`](samples/) directory has runnable scripts demonstrating common usage patterns, including an interactive chat REPL (`interactive-chat.ps1`), a function-calling demo (`tool-calling-demo.ps1`), and a semantic-search demo built on embeddings (`embedding-search.ps1`). See [`samples/README.md`](samples/README.md) for the full list.
 
 ---
 
