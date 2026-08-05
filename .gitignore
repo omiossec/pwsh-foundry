@@ -61,5 +61,8 @@ build/output/
 *.nupkg
 TestResults.xml
 
+# RAG sample: generated vector index, rebuilt by samples/rag/1-Build-RagIndex.ps1
+samples/rag/rag-index.json
+
 # Claude Code
 .claude/settings.local.json

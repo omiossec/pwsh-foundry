@@ -484,6 +484,8 @@ SDK mode (CLI absent) is treated as `≥ 0.10.0` and uses the new paths.
 
 The [`samples/`](samples/) directory has runnable scripts demonstrating common usage patterns, including an interactive chat REPL (`interactive-chat.ps1`), a function-calling demo (`tool-calling-demo.ps1`), and a semantic-search demo built on embeddings (`embedding-search.ps1`). See [`samples/README.md`](samples/README.md) for the full list.
 
+For a longer worked example, [`samples/rag/`](samples/rag/) builds a complete **Retrieval-Augmented Generation** pipeline out of `New-FoundryEmbedding`, `Compare-FoundryEmbedding` and `New-FoundryChat`: it chunks and embeds a document corpus into a vector index, retrieves the passages relevant to a question, and has the model answer from them with citations. Each stage prints what it is doing, and [`samples/rag/README.md`](samples/rag/README.md) explains the design and what a production system would do differently.
+
 ---
 
 ## Build and test
