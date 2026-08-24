@@ -8,13 +8,13 @@ A local model knows only what it saw during training. It has never seen your int
 
 You could fine-tune a model on your documents, but that is expensive, has to be redone whenever a document changes, and still gives you no citations.
 
-RAG takes the other route: **leave the model alone and fix the prompt.** Find the passages that are actually relevant to the question, paste them into the prompt, and instruct the model to answer only from them. The model stops being a knowledge store and becomes what it is good at — a reader that turns relevant text into a fluent answer.
+RAG takes the other route: **leave the model alone and fix the prompt.** Find the passages that are actually relevant to the question, paste them into the prompt, and instruct the model to answer only from them. The model stops being a knowledge store and becomes what it is good at; a reader that turns relevant text into a fluent answer.
 
 ## Why the corpus is fictional
 
-`corpus/` describes an invented company. The VPN client, the expense thresholds, the on-call rate — none of it exists, so no model can know any of it from pretraining.
+`corpus/` describes an invented company. The VPN client, the expense thresholds, the on-call rate, none of it exists, so no model can know any of it from pretraining.
 
-That is the point. If the corpus were about real PowerShell, the model could answer from memory and the demo would prove nothing. Because the facts are invented, a correct answer can *only* have come from retrieval. Run `2-Invoke-RagQuery.ps1 -CompareWithoutRag` to see the same model answer the same question with and without the retrieved context.
+Because the facts are invented, a correct answer can *only* have come from retrieval. Run `2-Invoke-RagQuery.ps1 -CompareWithoutRag` to see the same model answer the same question with and without the retrieved context.
 
 ## The pipeline
 
