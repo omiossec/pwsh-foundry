@@ -1,6 +1,6 @@
 # RAG with PowerShell and Foundry Local
 
-A worked example of **Retrieval-Augmented Generation** built entirely from PwshFoundry cmdlets. It is written to be *read*, not just run: every stage prints what it is doing, and the helper functions are deliberately kept in the sample rather than hidden behind a cmdlet.
+A worked example of **Retrieval-Augmented Generation** built entirely from PwshFoundry cmdlets. It is written to be *read*, not just run: every stage prints a verbose message to see what is happening, and helper functions are in the sample folder not  hidden behind a cmdlet.
 
 ## The problem RAG solves
 
