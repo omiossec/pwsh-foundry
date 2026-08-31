@@ -327,6 +327,222 @@ Describe 'New-FoundryChat' {
         }
     }
 
+    Context 'Tool calling' {
+        BeforeAll {
+            Mock -ModuleName PwshFoundry Test-FoundryModelName { $true }
+
+            $script:finalAnswer = [PSCustomObject]@{
+                id         = 'chatcmpl-final'
+                object     = 'chat.completion'
+                model      = 'phi-3-mini'
+                successful = $true
+                usage      = [PSCustomObject]@{ prompt_tokens = 10; completion_tokens = 5; total_tokens = 15 }
+                choices    = @(
+                    [PSCustomObject]@{
+                        finish_reason = 'stop'
+                        message       = [PSCustomObject]@{ role = 'assistant'; content = 'It is sunny in Paris.' }
+                    }
+                )
+            }
+
+            $script:toolCallResponse = [PSCustomObject]@{
+                id         = 'chatcmpl-tool'
+                object     = 'chat.completion'
+                model      = 'phi-3-mini'
+                successful = $true
+                usage      = [PSCustomObject]@{ prompt_tokens = 10; completion_tokens = 5; total_tokens = 15 }
+                choices    = @(
+                    [PSCustomObject]@{
+                        finish_reason = 'tool_calls'
+                        message       = [PSCustomObject]@{
+                            role       = 'assistant'
+                            content    = $null
+                            tool_calls = @(
+                                [PSCustomObject]@{
+                                    id       = 'call_1'
+                                    type     = 'function'
+                                    function = [PSCustomObject]@{
+                                        name      = 'Get-Weather'
+                                        arguments = '{"City":"Paris"}'
+                                    }
+                                }
+                            )
+                        }
+                    }
+                )
+            }
+        }
+
+        BeforeEach {
+            $script:chatBodies   = @()
+            $script:receivedCity = $null
+            $script:weatherTool  = New-FoundryTool -Name 'Get-Weather' `
+                -Description 'Returns the weather for a city' `
+                -Parameters @{ City = @{ type = 'string'; description = 'City name' } } `
+                -Required 'City' `
+                -Handler { param($City) $script:receivedCity = $City; "Sunny in $City" }
+        }
+
+        It 'executes the tool handler and returns the synthesized answer' {
+            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
+                if ($Action -eq 'models-loaded') { return @('phi-3-mini') }
+                if ($Action -ne 'chat') { return [PSCustomObject]@{} }
+                $script:chatBodies += ,($Body | ConvertTo-Json -Depth 10)
+                if ($script:chatBodies.Count -eq 1) { return $script:toolCallResponse }
+                return $script:finalAnswer
+            }
+
+            $result = New-FoundryChat -Message $script:message -Model 'phi-3-mini' -Tools $script:weatherTool
+
+            $script:receivedCity    | Should -Be 'Paris'
+            $result.message.content | Should -Be 'It is sunny in Paris.'
+            $result.finish_reason   | Should -Be 'stop'
+
+            $firstBody = $script:chatBodies[0] | ConvertFrom-Json
+            $firstBody.tools[0].function.name | Should -Be 'Get-Weather'
+
+            $secondBody  = $script:chatBodies[1] | ConvertFrom-Json
+            $toolMessage = $secondBody.messages | Where-Object { $_.role -eq 'tool' }
+            $toolMessage.tool_call_id | Should -Be 'call_1'
+            $toolMessage.content      | Should -Be 'Sunny in Paris'
+        }
+
+        It 'records tool turns in the context' {
+            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
+                if ($Action -eq 'models-loaded') { return @('phi-3-mini') }
+                if ($Action -ne 'chat') { return [PSCustomObject]@{} }
+                $script:chatBodies += ,($Body | ConvertTo-Json -Depth 10)
+                if ($script:chatBodies.Count -eq 1) { return $script:toolCallResponse }
+                return $script:finalAnswer
+            }
+
+            $ctx  = New-FoundryChatContext -UserPrompt 'What is the weather in Paris?'
+            $null = New-FoundryChat -Context $ctx -Model 'phi-3-mini' -Tools $script:weatherTool
+
+            $contextMessages = $ctx.GetMessages()
+            ($contextMessages | Where-Object { $_.role -eq 'assistant' -and $_.ContainsKey('tool_calls') }) |
+                Should -Not -BeNullOrEmpty
+            $toolTurn = $contextMessages | Where-Object { $_.role -eq 'tool' }
+            $toolTurn.tool_call_id | Should -Be 'call_1'
+            $toolTurn.content      | Should -Be 'Sunny in Paris'
+            $contextMessages[-1].role    | Should -Be 'assistant'
+            $contextMessages[-1].content | Should -Be 'It is sunny in Paris.'
+        }
+
+        It 'answers the model with an unknown-tool message when the tool does not exist' {
+            $unknownCallResponse = [PSCustomObject]@{
+                id         = 'chatcmpl-tool'
+                object     = 'chat.completion'
+                model      = 'phi-3-mini'
+                successful = $true
+                usage      = [PSCustomObject]@{ prompt_tokens = 10; completion_tokens = 5; total_tokens = 15 }
+                choices    = @(
+                    [PSCustomObject]@{
+                        finish_reason = 'tool_calls'
+                        message       = [PSCustomObject]@{
+                            role       = 'assistant'
+                            content    = $null
+                            tool_calls = @(
+                                [PSCustomObject]@{
+                                    id       = 'call_1'
+                                    type     = 'function'
+                                    function = [PSCustomObject]@{ name = 'Get-Nope'; arguments = '{}' }
+                                }
+                            )
+                        }
+                    }
+                )
+            }
+            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
+                if ($Action -eq 'models-loaded') { return @('phi-3-mini') }
+                if ($Action -ne 'chat') { return [PSCustomObject]@{} }
+                $script:chatBodies += ,($Body | ConvertTo-Json -Depth 10)
+                if ($script:chatBodies.Count -eq 1) { return $unknownCallResponse }
+                return $script:finalAnswer
+            }
+
+            $result = New-FoundryChat -Message $script:message -Model 'phi-3-mini' -Tools $script:weatherTool
+
+            $result.message.content | Should -Be 'It is sunny in Paris.'
+            $secondBody  = $script:chatBodies[1] | ConvertFrom-Json
+            $toolMessage = $secondBody.messages | Where-Object { $_.role -eq 'tool' }
+            $toolMessage.content | Should -Match "Unknown tool 'Get-Nope'"
+        }
+
+        It 'stops after MaxToolRounds and omits tools on the last request' {
+            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
+                if ($Action -eq 'models-loaded') { return @('phi-3-mini') }
+                if ($Action -ne 'chat') { return [PSCustomObject]@{} }
+                $script:chatBodies += ,($Body | ConvertTo-Json -Depth 10)
+                return $script:toolCallResponse
+            }
+
+            $result = New-FoundryChat -Message $script:message -Model 'phi-3-mini' `
+                -Tools $script:weatherTool -MaxToolRounds 2
+
+            $script:chatBodies.Count | Should -Be 3
+            ($script:chatBodies[0] | ConvertFrom-Json).PSObject.Properties.Name | Should -Contain 'tools'
+            ($script:chatBodies[2] | ConvertFrom-Json).PSObject.Properties.Name | Should -Not -Contain 'tools'
+            $result.finish_reason | Should -Be 'tool_calls'
+        }
+
+        It 'forces the named tool on the first request only' {
+            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
+                if ($Action -eq 'models-loaded') { return @('phi-3-mini') }
+                if ($Action -ne 'chat') { return [PSCustomObject]@{} }
+                $script:chatBodies += ,($Body | ConvertTo-Json -Depth 10)
+                if ($script:chatBodies.Count -eq 1) { return $script:toolCallResponse }
+                return $script:finalAnswer
+            }
+
+            $null = New-FoundryChat -Message $script:message -Model 'phi-3-mini' `
+                -Tools $script:weatherTool -ToolChoice 'Get-Weather'
+
+            $firstBody = $script:chatBodies[0] | ConvertFrom-Json
+            $firstBody.tool_choice.function.name | Should -Be 'Get-Weather'
+            ($script:chatBodies[1] | ConvertFrom-Json).PSObject.Properties.Name | Should -Not -Contain 'tool_choice'
+        }
+
+        It 'passes auto tool_choice as a plain string' {
+            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
+                if ($Action -eq 'models-loaded') { return @('phi-3-mini') }
+                if ($Action -ne 'chat') { return [PSCustomObject]@{} }
+                $script:chatBodies += ,($Body | ConvertTo-Json -Depth 10)
+                return $script:finalAnswer
+            }
+
+            $null = New-FoundryChat -Message $script:message -Model 'phi-3-mini' `
+                -Tools $script:weatherTool -ToolChoice 'auto'
+
+            ($script:chatBodies[0] | ConvertFrom-Json).tool_choice | Should -Be 'auto'
+        }
+
+        It 'throws when ToolChoice matches no tool' {
+            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
+                if ($Action -eq 'models-loaded') { return @('phi-3-mini') }
+                return [PSCustomObject]@{}
+            }
+
+            {
+                New-FoundryChat -Message $script:message -Model 'phi-3-mini' `
+                    -Tools $script:weatherTool -ToolChoice 'Get-Nope'
+            } | Should -Throw "*ToolChoice 'Get-Nope'*"
+        }
+
+        It 'does not add tools to the body when Tools is not supplied' {
+            Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
+                if ($Action -eq 'models-loaded') { return @('phi-3-mini') }
+                if ($Action -ne 'chat') { return [PSCustomObject]@{} }
+                $script:chatBodies += ,($Body | ConvertTo-Json -Depth 10)
+                return $script:finalAnswer
+            }
+
+            $null = New-FoundryChat -Message $script:message -Model 'phi-3-mini'
+
+            ($script:chatBodies[0] | ConvertFrom-Json).PSObject.Properties.Name | Should -Not -Contain 'tools'
+        }
+    }
+
     Context 'Mandatory parameters' {
         It 'throws when Message is not provided' {
             { New-FoundryChat -Model 'phi-3-mini' } | Should -Throw
