@@ -12,7 +12,7 @@ function Invoke-FoundryApiRequest {
         [int]$Port,
 
         [Parameter(Mandatory)]
-        [ValidateSet('chat', 'transcribe', 'status', 'model-list', 'models-loaded',
+        [ValidateSet('chat', 'embeddings', 'transcribe', 'status', 'model-list', 'models-loaded',
                      'model-load', 'model-unload', 'tokenizer')]
         [string]$Action,
 
@@ -32,6 +32,7 @@ function Invoke-FoundryApiRequest {
 
     $pathMap = @{
         'chat'           = @{ Old = '/v1/chat/completions';                        New = '/v1/chat/completions' }
+        'embeddings'     = @{ Old = $null;                                        New = '/v1/embeddings' }
         'transcribe'     = @{ Old = '/v1/audio/transcriptions';                    New = '/v1/audio/transcriptions' }
         'status'         = @{ Old = '/openai/status';                              New = '/status' }
         'model-list'     = @{ Old = '/foundry/list';                               New = '/v1/models' }
