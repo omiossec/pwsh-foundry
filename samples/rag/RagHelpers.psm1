@@ -28,7 +28,8 @@ function ConvertTo-DocumentChunk {
     .PARAMETER Source
         Name used to identify where a chunk came from (typically the file name).
     .PARAMETER MaxWords
-        Target maximum words per chunk. Paragraphs longer than this are windowed.
+        Target maximum words per chunk. Paragraphs longer than this are windowed. Generally, smaller chunks yield more precise retrieval. 
+        I choose 120 as a reasonable default, industry use 400-500 words per chunk.
     .PARAMETER OverlapWords
         Number of words carried from the end of one chunk into the start of the next.
     #>
@@ -159,8 +160,7 @@ function Get-RelevantChunk {
 
     $scored = foreach ($candidate in $Chunk) {
         [PSCustomObject]@{
-            Score = Compare-FoundryEmbedding -ReferenceEmbedding $QueryEmbedding `
-                                             -DifferenceEmbedding $candidate.Embedding
+            Score = Compare-FoundryEmbedding -ReferenceEmbedding $QueryEmbedding -DifferenceEmbedding $candidate.Embedding
             Chunk = $candidate
         }
     }
