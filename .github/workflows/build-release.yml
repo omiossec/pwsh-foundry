@@ -24,9 +24,8 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          Set-PSResourceRepository -Name PSGallery -Trusted
-          Install-PSResource -Name Pester -Version '[5.0,6.0)' -Scope CurrentUser -Quiet
-          Install-PSResource -Name PSScriptAnalyzer -Scope CurrentUser -Quiet
+          Install-PSResource -Name Pester -Version '[5.0,6.0)' -Scope CurrentUser -TrustRepository -Quiet
+          Install-PSResource -Name PSScriptAnalyzer -Scope CurrentUser -TrustRepository -Quiet
 
       - name: Resolve version
         id: version
