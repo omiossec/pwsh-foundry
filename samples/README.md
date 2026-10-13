@@ -8,4 +8,5 @@ In this section you will find some code on how to use the module
 - interactive-chat.ps1: interactive REPL chat loop that keeps conversation history via FoundryChatContext
 - tool-calling-demo.ps1: function calling demo where the model triggers real PowerShell commands via New-FoundryTool
 - embedding-search.ps1: semantic search over a text corpus using qwen3-embedding models, New-FoundryEmbedding and Compare-FoundryEmbedding
+- audio-transcription.ps1: transcribe Recording.mp3 with a local Whisper model through the /v1/audio/transcriptions API (Foundry Local 0.11.0+), as text, as an object, and translated into another language
 - rag/: a full Retrieval-Augmented Generation walkthrough — chunk and embed a document corpus into a vector index, then answer questions grounded in the retrieved passages. See [rag/README.md](rag/README.md)

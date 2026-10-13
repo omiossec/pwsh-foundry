@@ -213,19 +213,28 @@ Stop-FoundryWebServer
 
 ### `Save-FoundryModel`
 
-Loads a model into the local Foundry service, downloading it first if it isn't already cached, by calling `GET /models/load/{name}`.
-The model ID must exist in the Foundry catalogue (`Get-FoundryModelList`) — a terminating error is thrown otherwise.
+Downloads a model into the local Foundry cache with `foundry model download`, and optionally loads it into the service.
+The model must exist in the Foundry catalogue (`Get-FoundryModelList`) — a terminating error is thrown otherwise.
+Models already cached are not downloaded again unless `-Force` is used. Supports `-WhatIf` and `-Confirm`.
 
-> Foundry Local **0.10.0+** removed the separate download-by-URI endpoint (`/openai/download`); loading a model by name now handles both fetching and loading, so this cmdlet works the same way across CLI versions.
+> The Foundry Local service has no download endpoint, and `GET /models/load/{name}` refuses models that are not cached,
+> so this cmdlet requires the Foundry CLI.
 
 ```powershell
-Save-FoundryModel -ModelID 'Phi-4-mini-instruct-generic-cpu:4'
+Save-FoundryModel -ModelID 'phi-4-mini'
+
+# Download (if needed) and load into the service
+Save-FoundryModel -ModelID 'openai-whisper-small-generic-cpu:4' -Load
 ```
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `ModelID` | `string` | Yes | — | Model ID as it appears in `Get-FoundryModelList` (e.g. `Phi-4-mini-instruct-generic-cpu:4`). |
-| `Port` | `int` | No | — | Overrides the port used to reach the local Foundry service. |
+| `ModelID` | `string` | Yes | — | Model alias (`whisper-small`), id or versioned id (`openai-whisper-small-generic-cpu:4`). |
+| `Force` | `switch` | No | — | Re-downloads a cached model. A loaded model is unloaded for the download and loaded again afterwards. |
+| `Load` | `switch` | No | — | Loads the model into the Foundry service after the download. |
+| `Port` | `int` | No | — | Overrides the port used to reach the local Foundry service (with `-Load` / `-Force`). |
+
+Returns an object with `Alias`, `Id`, `Downloaded` (`$false` when the model was already cached), `Loaded` and `Message`.
 
 ---
 
@@ -314,29 +323,32 @@ The returned `PSCustomObject` has the following properties:
 
 ### `New-FoundryAudioTranscription`
 
-Transcribes an audio file to text using a local Foundry Whisper model by shelling out to `foundry transcribe`.
+Transcribes an audio file to text using a local Foundry Whisper model by calling `POST /v1/audio/transcriptions`.
+The model is resolved against the catalog (alias, id or versioned id) and loaded automatically if needed.
 
-> This function uses the Foundry CLI directly — the local audio transcriptions REST endpoint is not used.
-
-> **Requires Foundry Local v1.1.0**, installed manually — see the CLI version notice at the top of this document.
+> **Requires Foundry Local 0.11.0+.** The endpoint receives the absolute path of the audio file (not an upload), so the
+> file must be readable by the local Foundry service. Requests are subject to the module's 120-second API timeout.
 
 ```powershell
-New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile 'C:\recordings\meeting.mp3'
+New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile 'C:\recordings\meeting.mp3'
 
-# With language and response format
-New-FoundryAudioTranscription -ModelId 'whisper-large-v3' -AudioFile './interview.wav' `
+# Object output, transcribed into French
+New-FoundryAudioTranscription -ModelId 'whisper-large-v3-turbo' -AudioFile './interview.wav' `
                               -Language 'fr' -ResponseFormat 'json'
 ```
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `ModelId` | `string` | Yes | — | Whisper model ID (must match `whisper`, case-insensitive). |
+| `ModelId` | `string` | Yes | — | Whisper model alias, id or versioned id (must match `whisper`, case-insensitive). |
 | `AudioFile` | `string` | Yes | — | Path to the audio file. Must exist and have a `.mp3`, `.wav`, `.flac`, `.ogg`, or `.webm` extension. |
-| `Language` | `string` | No | `en` | Source language hint passed to the model. |
+| `Language` | `string` | No | auto-detect | ISO-639-1 code. When it differs from the spoken language, Whisper translates into it. |
+| `Prompt` | `string` | No | — | Text to guide the style or continue a previous segment. |
+| `Temperature` | `double` | No | — | Sampling temperature between 0 and 1. |
 | `ResponseFormat` | `string` | No | `text` | One of `text`, `json`. |
 | `LogFilePath` | `string` | No | default: temp folder | Path to a log file. When the request completes, an entry is appended via `New-FoundryLogEntries` recording the model, the audio file/language as the "user prompt", and the transcription result as the "assistant response". If omitted, entries are logged to `PwshFoundry_ChatLog.jsonl` in the current user's temp directory. An invalid path throws a terminating error before any request is sent. |
 
-Returns the raw transcription: a string when `-ResponseFormat text` (the default), or a parsed JSON object when `-ResponseFormat json`.
+Returns the transcribed text as a string when `-ResponseFormat text` (the default), or an object with `Id`, `Text`, `Model`, `AudioFile` and `Language` when `-ResponseFormat json`.
+See [samples/audio-transcription.ps1](../samples/audio-transcription.ps1).
 
 ---
 
@@ -408,10 +420,10 @@ The module detects the active version via `Get-FoundryVersion` and automatically
 | Loaded models | `GET /openai/models` | `GET /models/loaded` |
 | Load a model | `POST /openai/load/{name}` | `GET /models/load/{name}` |
 | Unload a model | `POST /openai/unload/{name}` | `GET /models/unload/{name}` |
-| Download a model | `POST /openai/download` | *(removed — use `Save-FoundryModel`, which now loads by name via `GET /models/load/{name}`)* |
+| Download a model | `POST /openai/download` | *(removed — `Save-FoundryModel` now downloads through `foundry model download`)* |
 | Token count | `POST /v1/chat/completions/tokenizer/encode/count` | *(removed — `New-FoundryChat -CountTokenOnly` now reads the `usage` field returned by the chat completion endpoint instead)* |
 | Chat completion | `POST /v1/chat/completions` | `POST /v1/chat/completions` *(unchanged; response now includes a `usage` field)* |
-| Audio transcription | `POST /v1/audio/transcriptions` | `POST /v1/audio/transcriptions` *(unchanged)* |
+| Audio transcription | *(not available — `foundry transcribe` CLI)* | `POST /v1/audio/transcriptions` *(0.11.0+, JSON body with a local `filename`)* |
 | Embeddings | *(not available)* | `POST /v1/embeddings` |
 
 SDK mode (CLI absent) is treated as `≥ 0.10.0` and uses the new paths.

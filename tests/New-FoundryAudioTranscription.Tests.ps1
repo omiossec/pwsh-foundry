@@ -2,82 +2,159 @@
 
 BeforeAll {
     Import-Module "$PSScriptRoot/../src/PwshFoundry/PwshFoundry.psd1" -Force
+
+    # Shared mocks: Foundry 0.11.0, a whisper model in the catalog, model already loaded.
+    function script:Set-DefaultMock {
+        param([string[]] $LoadedModels = @('openai-whisper-small-generic-cpu:4'))
+
+        Mock -ModuleName PwshFoundry Get-FoundryVersion {
+            [PSCustomObject]@{ Source = 'CLI'; Version = '0.11.0'; Message = '0.11.0' }
+        }
+        Mock -ModuleName PwshFoundry Get-FoundryModelList {
+            [PSCustomObject]@{ alias = 'whisper-small'; id = 'openai-whisper-small-generic-cpu:4' }
+            [PSCustomObject]@{ alias = 'qwen2.5-0.5b'; id = 'qwen2.5-0.5b-instruct-generic-cpu:4' }
+        }
+        Mock -ModuleName PwshFoundry New-FoundryLogEntries { }
+        $script:loadedModels = $LoadedModels
+        Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest -ParameterFilter { $Action -eq 'models-loaded' } {
+            , $script:loadedModels
+        }
+        Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest -ParameterFilter { $Action -eq 'model-load' } {
+            $script:loadedModels = @('openai-whisper-small-generic-cpu:4')
+            'ok'
+        }
+        Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest -ParameterFilter { $Action -eq 'transcribe' } {
+            $script:capturedBody = $Body
+            [PSCustomObject]@{ id = 'audio_123'; text = ' Hello world' }
+        }
+    }
 }
 
 Describe 'New-FoundryAudioTranscription' {
 
-    Context 'Correct CLI call' {
+    Context 'REST API call' {
         BeforeAll {
             $script:audioFile = Join-Path $TestDrive 'test.mp3'
             New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
-            Mock -ModuleName PwshFoundry Invoke-FoundryCli { 'Hello world' }
+            Set-DefaultMock
         }
 
-        It 'calls the transcribe subcommand' {
-            New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile
-            Should -Invoke Invoke-FoundryCli -ModuleName PwshFoundry -ParameterFilter {
-                $Arguments[0] -eq 'transcribe'
+        It 'POSTs to the transcribe action' {
+            New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile
+            Should -Invoke Invoke-FoundryApiRequest -ModuleName PwshFoundry -ParameterFilter {
+                $Action -eq 'transcribe' -and $Method -eq 'POST'
             }
         }
 
-        It 'returns the CLI response' {
-            $result = New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile
+        It 'returns the trimmed text by default' {
+            $result = New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile
             $result | Should -Be 'Hello world'
+        }
+
+        It 'returns an object when ResponseFormat is json' {
+            $result = New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile -ResponseFormat 'json'
+            $result.Id | Should -Be 'audio_123'
+            $result.Text | Should -Be 'Hello world'
+            $result.Model | Should -Be 'openai-whisper-small-generic-cpu:4'
+            $result.AudioFile | Should -Be (Resolve-Path $script:audioFile).ProviderPath
+        }
+
+        It 'does not call the Foundry CLI' {
+            Mock -ModuleName PwshFoundry Invoke-FoundryCli { }
+            New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile
+            Should -Invoke Invoke-FoundryCli -ModuleName PwshFoundry -Times 0
         }
     }
 
-    Context 'Argument composition - required fields' {
+    Context 'Request body composition' {
         BeforeAll {
             $script:audioFile = Join-Path $TestDrive 'recording.wav'
             New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
-            Mock -ModuleName PwshFoundry Invoke-FoundryCli {
-                $script:capturedArguments = $Arguments
-                'ok'
-            }
-            New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile
+            Set-DefaultMock
         }
 
-        It 'includes --model' {
-            $index = $script:capturedArguments.IndexOf('--model')
-            $script:capturedArguments[$index + 1] | Should -Be 'whisper-1'
+        It 'sends the versioned model id when given an alias' {
+            New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile
+            $script:capturedBody.model | Should -Be 'openai-whisper-small-generic-cpu:4'
         }
 
-        It 'includes the resolved file path with --file' {
-            $index = $script:capturedArguments.IndexOf('--file')
-            $script:capturedArguments[$index + 1] | Should -Be (Resolve-Path $script:audioFile).Path
+        It 'sends the versioned model id when given an unversioned id' {
+            New-FoundryAudioTranscription -ModelId 'openai-whisper-small-generic-cpu' -AudioFile $script:audioFile
+            $script:capturedBody.model | Should -Be 'openai-whisper-small-generic-cpu:4'
         }
 
-        It 'defaults --language to en' {
-            $index = $script:capturedArguments.IndexOf('--language')
-            $script:capturedArguments[$index + 1] | Should -Be 'en'
+        It 'sends the resolved absolute path as filename' {
+            New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile
+            $script:capturedBody.filename | Should -Be (Resolve-Path $script:audioFile).ProviderPath
         }
 
-        It 'defaults --output to text' {
-            $index = $script:capturedArguments.IndexOf('--output')
-            $script:capturedArguments[$index + 1] | Should -Be 'text'
+        It 'omits optional fields when not supplied' {
+            New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile
+            $script:capturedBody.Keys | Should -Not -Contain 'language'
+            $script:capturedBody.Keys | Should -Not -Contain 'prompt'
+            $script:capturedBody.Keys | Should -Not -Contain 'temperature'
+        }
+
+        It 'includes language, prompt and temperature when supplied' {
+            New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile `
+                -Language 'FR' -Prompt 'meeting notes' -Temperature 0.2
+            $script:capturedBody.language | Should -Be 'fr'
+            $script:capturedBody.prompt | Should -Be 'meeting notes'
+            $script:capturedBody.temperature | Should -Be 0.2
         }
     }
 
-    Context 'Optional parameters are included when supplied' {
+    Context 'Model loading' {
         BeforeAll {
-            $script:audioFile = Join-Path $TestDrive 'audio.flac'
+            $script:audioFile = Join-Path $TestDrive 'load.mp3'
             New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
-            Mock -ModuleName PwshFoundry Invoke-FoundryCli {
-                $script:capturedArguments = $Arguments
-                'ok'
+        }
+
+        It 'does not load the model when it is already loaded' {
+            Set-DefaultMock
+            New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile
+            Should -Invoke Invoke-FoundryApiRequest -ModuleName PwshFoundry -Times 0 -ParameterFilter {
+                $Action -eq 'model-load'
             }
         }
 
-        It 'includes language when supplied' {
-            New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -Language 'fr'
-            $index = $script:capturedArguments.IndexOf('--language')
-            $script:capturedArguments[$index + 1] | Should -Be 'fr'
+        It 'loads the model by alias when it is not loaded' {
+            Set-DefaultMock -LoadedModels @()
+            New-FoundryAudioTranscription -ModelId 'openai-whisper-small-generic-cpu:4' -AudioFile $script:audioFile
+            Should -Invoke Invoke-FoundryApiRequest -ModuleName PwshFoundry -Times 1 -ParameterFilter {
+                $Action -eq 'model-load' -and $PathParameters.name -eq 'whisper-small'
+            }
+            $script:capturedBody.model | Should -Be 'openai-whisper-small-generic-cpu:4'
         }
 
-        It 'includes response format when supplied' {
-            New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -ResponseFormat 'json'
-            $index = $script:capturedArguments.IndexOf('--output')
-            $script:capturedArguments[$index + 1] | Should -Be 'json'
+        It 'throws when the model is not in the catalog' {
+            Set-DefaultMock
+            { New-FoundryAudioTranscription -ModelId 'whisper-unknown' -AudioFile $script:audioFile } |
+                Should -Throw -ExpectedMessage "*does not exist in the local Foundry*"
+        }
+    }
+
+    Context 'Foundry version' {
+        BeforeAll {
+            $script:audioFile = Join-Path $TestDrive 'version.mp3'
+            New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
+            Set-DefaultMock
+        }
+
+        It 'throws on Foundry CLI older than 0.11.0' {
+            Mock -ModuleName PwshFoundry Get-FoundryVersion {
+                [PSCustomObject]@{ Source = 'CLI'; Version = '0.10.2'; Message = '0.10.2' }
+            }
+            { New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile } |
+                Should -Throw -ExpectedMessage '*requires Foundry Local 0.11.0*'
+        }
+
+        It 'accepts SDK mode' {
+            Mock -ModuleName PwshFoundry Get-FoundryVersion {
+                [PSCustomObject]@{ Source = 'SDK'; Version = $null; Message = 'SDK' }
+            }
+            { New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile } |
+                Should -Not -Throw
         }
     }
 
@@ -85,89 +162,62 @@ Describe 'New-FoundryAudioTranscription' {
         BeforeAll {
             $script:audioFile = Join-Path $TestDrive 'model-check.mp3'
             New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
-            Mock -ModuleName PwshFoundry Invoke-FoundryCli { 'ok' }
-        }
-
-        It 'accepts a model name with whisper (lowercase)' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-large-v3' -AudioFile $script:audioFile } | Should -Not -Throw
+            Set-DefaultMock
         }
 
         It 'accepts a model name with Whisper (mixed case)' {
-            { New-FoundryAudioTranscription -ModelId 'Whisper-1' -AudioFile $script:audioFile } | Should -Not -Throw
+            { New-FoundryAudioTranscription -ModelId 'Whisper-Small' -AudioFile $script:audioFile } |
+                Should -Not -Throw
         }
 
         It 'throws when model does not contain whisper' {
-            { New-FoundryAudioTranscription -ModelId 'phi-3-mini' -AudioFile $script:audioFile } | Should -Throw
+            { New-FoundryAudioTranscription -ModelId 'qwen2.5-0.5b' -AudioFile $script:audioFile } |
+                Should -Throw -ErrorId 'ParameterArgumentValidationError,New-FoundryAudioTranscription'
         }
     }
 
     Context 'Parameter validation - AudioFile extension' {
         BeforeAll {
-            Mock -ModuleName PwshFoundry Invoke-FoundryCli { 'ok' }
+            Set-DefaultMock
         }
 
-        It 'accepts .mp3' {
-            $f = Join-Path $TestDrive 'a.mp3'
+        It 'accepts .<_>' -ForEach @('mp3', 'wav', 'flac', 'ogg', 'webm') {
+            $f = Join-Path $TestDrive "a.$_"
             New-Item $f -ItemType File -Force | Out-Null
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $f } | Should -Not -Throw
+            { New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $f } | Should -Not -Throw
         }
 
-        It 'accepts .wav' {
-            $f = Join-Path $TestDrive 'a.wav'
-            New-Item $f -ItemType File -Force | Out-Null
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $f } | Should -Not -Throw
-        }
-
-        It 'accepts .flac' {
-            $f = Join-Path $TestDrive 'a.flac'
-            New-Item $f -ItemType File -Force | Out-Null
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $f } | Should -Not -Throw
-        }
-
-        It 'accepts .ogg' {
-            $f = Join-Path $TestDrive 'a.ogg'
-            New-Item $f -ItemType File -Force | Out-Null
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $f } | Should -Not -Throw
-        }
-
-        It 'accepts .webm' {
-            $f = Join-Path $TestDrive 'a.webm'
-            New-Item $f -ItemType File -Force | Out-Null
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $f } | Should -Not -Throw
-        }
-
-        It 'throws for .txt extension' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile (Join-Path $TestDrive 'a.txt') } | Should -Throw
-        }
-
-        It 'throws for .mp4 extension' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile (Join-Path $TestDrive 'a.mp4') } | Should -Throw
+        It 'throws for .<_> extension' -ForEach @('txt', 'mp4') {
+            { New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile (Join-Path $TestDrive "a.$_") } |
+                Should -Throw
         }
     }
 
-    Context 'Parameter validation - AudioFile must exist on disk' {
-        It 'throws when the file does not exist' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile (Join-Path $TestDrive 'nonexistent.mp3') } | Should -Throw
-        }
-    }
-
-    Context 'Parameter validation - ResponseFormat' {
+    Context 'Parameter validation - other parameters' {
         BeforeAll {
             $script:audioFile = Join-Path $TestDrive 'fmt.mp3'
             New-Item -Path $script:audioFile -ItemType File -Force | Out-Null
-            Mock -ModuleName PwshFoundry Invoke-FoundryCli { 'ok' }
+            Set-DefaultMock
         }
 
-        It 'accepts text' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -ResponseFormat 'text' } | Should -Not -Throw
+        It 'throws when the file does not exist' {
+            { New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile (Join-Path $TestDrive 'nonexistent.mp3') } |
+                Should -Throw -ErrorId 'AudioFileNotFound,New-FoundryAudioTranscription'
         }
 
-        It 'accepts json' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -ResponseFormat 'json' } | Should -Not -Throw
+        It 'throws for an invalid ResponseFormat value' {
+            { New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile -ResponseFormat 'xml' } |
+                Should -Throw
         }
 
-        It 'throws for an invalid format value' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' -AudioFile $script:audioFile -ResponseFormat 'xml' } | Should -Throw
+        It 'throws for a Temperature above 1' {
+            { New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile -Temperature 1.5 } |
+                Should -Throw
+        }
+
+        It 'throws for an invalid Language code' {
+            { New-FoundryAudioTranscription -ModelId 'whisper-small' -AudioFile $script:audioFile -Language 'english' } |
+                Should -Throw
         }
     }
 
@@ -177,7 +227,7 @@ Describe 'New-FoundryAudioTranscription' {
         }
 
         It 'throws when AudioFile is not provided' {
-            { New-FoundryAudioTranscription -ModelId 'whisper-1' } | Should -Throw
+            { New-FoundryAudioTranscription -ModelId 'whisper-small' } | Should -Throw
         }
     }
 }
