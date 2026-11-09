@@ -67,7 +67,7 @@ Get-FoundryModelCache
 
 # Send a chat request — the model is loaded automatically if not already running
 $msg    = New-FoundryMessage -UserPrompt 'Explain quantum computing in plain English'
-$result = New-FoundryChat -Message $msg -Model 'qwen2.5-0.5b-instruct-generic-cpu'
+$result = New-FoundryChat -Message $msg -Model 'qwen3-0.6b-generic-gpu'
 $result.message.content
 ```
 

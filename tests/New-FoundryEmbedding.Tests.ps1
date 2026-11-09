@@ -38,6 +38,9 @@ Describe 'New-FoundryEmbedding' {
     Context 'Correct API call' {
         BeforeAll {
             Mock -ModuleName PwshFoundry Test-FoundryModelName { $true }
+            Mock -ModuleName PwshFoundry Get-FoundryModelList {
+                [PSCustomObject]@{ alias = 'qwen3-embedding-0.6b'; id = 'qwen3-embedding-0.6b:1'; cached = $true }
+            }
             Mock -ModuleName PwshFoundry Invoke-FoundryApiRequest {
                 @('qwen3-embedding-0.6b:1')
             } -ParameterFilter { $Action -eq 'models-loaded' }
@@ -53,11 +56,11 @@ Describe 'New-FoundryEmbedding' {
             }
         }
 
-        It 'sends model and input in the body' {
+        It 'sends the versioned model id and input in the body' {
             New-FoundryEmbedding -Model 'qwen3-embedding-0.6b' -Text 'first', 'second'
             Should -Invoke Invoke-FoundryApiRequest -ModuleName PwshFoundry -ParameterFilter {
                 $Action -eq 'embeddings' -and
-                $Body.model -eq 'qwen3-embedding-0.6b' -and
+                $Body.model -eq 'qwen3-embedding-0.6b:1' -and
                 $Body.input.Count -eq 2 -and
                 $Body.input[0] -eq 'first' -and
                 $Body.input[1] -eq 'second'

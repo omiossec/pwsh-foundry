@@ -1,0 +1,455 @@
+{
+  "FoundryVersion": "0.13.0",
+  "CliMessage": "0.13.0",
+  "ModuleVersion": "0.2.1",
+  "PowerShell": "7.6.3",
+  "OS": "Microsoft Windows 10.0.26300",
+  "Date": "2026-11-03T19:53:31.0427902+01:00",
+  "Baseline": null,
+  "Models": {
+    "Chat": "qwen2.5-0.5b-instruct-generic-cpu",
+    "Embedding": "qwen3-embedding-0.6b-generic-gpu",
+    "Audio": "openai-whisper-tiny-generic-cpu"
+  },
+  "Summary": {
+    "Pass": 16,
+    "Diff": 0,
+    "Fail": 10,
+    "Skip": 2,
+    "Regressions": 0
+  },
+  "Results": [
+    {
+      "Feature": "CliVersion",
+      "Command": "Get-FoundryVersion",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 49,
+      "Observation": {
+        "Source": "CLI",
+        "PropertyNames": [
+          "Message",
+          "Source",
+          "Version"
+        ]
+      },
+      "Info": {
+        "Message": "0.13.0"
+      }
+    },
+    {
+      "Feature": "ServicePort",
+      "Command": "Get-FoundryServicePort (private, foundry server status)",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 62,
+      "Observation": {
+        "PortType": "Int32"
+      },
+      "Info": {
+        "Port": 60288
+      }
+    },
+    {
+      "Feature": "CliModelListJson",
+      "Command": "foundry model list --output json (private Invoke-FoundryCli)",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 75,
+      "Observation": {
+        "TopLevelKeys": "models",
+        "EntryKeys": [
+          "alias",
+          "cached",
+          "device",
+          "displayName",
+          "fileSizeMb",
+          "id",
+          "license",
+          "source",
+          "supportsToolCalling",
+          "type"
+        ],
+        "IdsHaveVersionTag": true
+      },
+      "Info": {
+        "ModelCount": 48,
+        "Types": "Chat, Embedding, Multimodal, Speech",
+        "Devices": "Cpu, Gpu, Npu"
+      }
+    },
+    {
+      "Feature": "ModelList",
+      "Command": "Get-FoundryModelList",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 60,
+      "Observation": {
+        "PropertyNames": [
+          "alias",
+          "cached",
+          "device",
+          "displayName",
+          "fileSizeMb",
+          "id",
+          "license",
+          "supportsToolCalling",
+          "type"
+        ],
+        "CachedType": "Boolean",
+        "ToolCallingReported": true
+      },
+      "Info": {
+        "Count": 48,
+        "Cached": 23
+      }
+    },
+    {
+      "Feature": "ModelResolve",
+      "Command": "Resolve-FoundryModel (private, alias/id/versioned id)",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 20,
+      "Observation": {
+        "AliasResolves": true,
+        "IdResolves": true,
+        "VersionedResolves": true
+      },
+      "Info": {}
+    },
+    {
+      "Feature": "Status",
+      "Command": "Get-FoundryStatus",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 2144,
+      "Observation": {
+        "ReturnType": "PSCustomObject",
+        "PropertyNames": [
+          "artifact_qualified_model_management",
+          "endpoints",
+          "modelCachePath",
+          "pid"
+        ]
+      },
+      "Info": {
+        "Status": "{\"artifact_qualified_model_management\":true,\"endpoints\":[\"http://127.0.0.1:60288\"],\"modelCachePath\":\"C:\\\\Users\\\\olivi/.foundry/cache/models\",\"pid\":83448}"
+      }
+    },
+    {
+      "Feature": "ApiModelList",
+      "Command": "Invoke-FoundryApiRequest -Action model-list (private)",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 2089,
+      "Observation": {
+        "PropertyNames": [
+          "data",
+          "object"
+        ],
+        "EntryKeys": [
+          "created",
+          "id",
+          "object",
+          "owned_by"
+        ]
+      },
+      "Info": {}
+    },
+    {
+      "Feature": "ModelUnload",
+      "Command": "Invoke-FoundryApiRequest -Action model-unload (private)",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 6345,
+      "Observation": {
+        "ResponseType": "PSCustomObject",
+        "Unloaded": true
+      },
+      "Info": {}
+    },
+    {
+      "Feature": "ModelCacheEmpty",
+      "Command": "Get-FoundryModelCache (no model loaded)",
+      "Status": "Skip",
+      "Regression": false,
+      "Differences": [],
+      "Error": "Other models are still loaded in the service",
+      "DurationMs": 0,
+      "Observation": null,
+      "Info": null
+    },
+    {
+      "Feature": "ChatAutoLoad",
+      "Command": "New-FoundryChat (model not loaded)",
+      "Status": "Fail",
+      "Regression": false,
+      "Differences": [],
+      "Error": "[FoundryApiRequestError,Invoke-FoundryApiRequest] Foundry API request failed (GET http://localhost:60288/models/load/qwen2.5-0.5b-instruct-generic-cpu): Response status code does not indicate success: 404 (Not Found). Server response: { \"error\": { \"code\": null, \"message\": \"Model not found: No model matching \\u0027qwen2.5-0.5b-instruct-generic-cpu\\u0027\", \"param\": null, \"type\": \"invalid_request_error\" } }",
+      "DurationMs": 4227,
+      "Observation": null,
+      "Info": {}
+    },
+    {
+      "Feature": "DeployModel",
+      "Command": "Deploy-FoundryModel",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 6628,
+      "Observation": {
+        "ResponseType": "PSCustomObject",
+        "Loaded": true
+      },
+      "Info": {}
+    },
+    {
+      "Feature": "ModelCache",
+      "Command": "Get-FoundryModelCache (model loaded)",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 2091,
+      "Observation": {
+        "ElementType": "String",
+        "IdsHaveVersionTag": true
+      },
+      "Info": {
+        "Loaded": "qwen2.5-0.5b-instruct-generic-cpu:4, openai-whisper-tiny-generic-cpu:4"
+      }
+    },
+    {
+      "Feature": "SaveModelCached",
+      "Command": "Save-FoundryModel (already cached)",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 111,
+      "Observation": {
+        "PropertyNames": [
+          "Alias",
+          "Downloaded",
+          "Id",
+          "Loaded",
+          "Message"
+        ],
+        "Downloaded": false,
+        "Loaded": false,
+        "MessageNamesQuotedId": true
+      },
+      "Info": {
+        "Message": "Model 'qwen2.5-0.5b-instruct-generic-cpu:4' is already cached. Use --force to download it again."
+      }
+    },
+    {
+      "Feature": "SaveModelUnknown",
+      "Command": "Save-FoundryModel (unknown model)",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 3,
+      "Observation": {
+        "ErrorId": "FoundryModelNotFound"
+      },
+      "Info": {}
+    },
+    {
+      "Feature": "ChatMessage",
+      "Command": "New-FoundryMessage + New-FoundryChat",
+      "Status": "Fail",
+      "Regression": false,
+      "Differences": [],
+      "Error": "[FoundryApiRequestError,Invoke-FoundryApiRequest] Foundry API request failed (POST http://localhost:60288/v1/chat/completions): Response status code does not indicate success: 404 (Not Found). Server response: { \"error\": { \"code\": null, \"message\": \"Model not found: No model matching \\u0027qwen2.5-0.5b-instruct-generic-cpu\\u0027\", \"param\": null, \"type\": \"invalid_request_error\" } }",
+      "DurationMs": 4182,
+      "Observation": null,
+      "Info": {}
+    },
+    {
+      "Feature": "ChatMaxTokens",
+      "Command": "New-FoundryChat -MaxTokens",
+      "Status": "Fail",
+      "Regression": false,
+      "Differences": [],
+      "Error": "[FoundryApiRequestError,Invoke-FoundryApiRequest] Foundry API request failed (POST http://localhost:60288/v1/chat/completions): Response status code does not indicate success: 404 (Not Found). Server response: { \"error\": { \"code\": null, \"message\": \"Model not found: No model matching \\u0027qwen2.5-0.5b-instruct-generic-cpu\\u0027\", \"param\": null, \"type\": \"invalid_request_error\" } }",
+      "DurationMs": 4172,
+      "Observation": null,
+      "Info": {}
+    },
+    {
+      "Feature": "ChatCountToken",
+      "Command": "New-FoundryChat -CountTokenOnly",
+      "Status": "Fail",
+      "Regression": false,
+      "Differences": [],
+      "Error": "[FoundryApiRequestError,Invoke-FoundryApiRequest] Foundry API request failed (POST http://localhost:60288/v1/chat/completions): Response status code does not indicate success: 404 (Not Found). Server response: { \"error\": { \"code\": null, \"message\": \"Model not found: No model matching \\u0027qwen2.5-0.5b-instruct-generic-cpu\\u0027\", \"param\": null, \"type\": \"invalid_request_error\" } }",
+      "DurationMs": 4177,
+      "Observation": null,
+      "Info": {}
+    },
+    {
+      "Feature": "ChatContext",
+      "Command": "New-FoundryChatContext + New-FoundryChat -Context",
+      "Status": "Fail",
+      "Regression": false,
+      "Differences": [],
+      "Error": "[FoundryApiRequestError,Invoke-FoundryApiRequest] Foundry API request failed (POST http://localhost:60288/v1/chat/completions): Response status code does not indicate success: 404 (Not Found). Server response: { \"error\": { \"code\": null, \"message\": \"Model not found: No model matching \\u0027qwen2.5-0.5b-instruct-generic-cpu\\u0027\", \"param\": null, \"type\": \"invalid_request_error\" } }",
+      "DurationMs": 4182,
+      "Observation": null,
+      "Info": {}
+    },
+    {
+      "Feature": "ChatTools",
+      "Command": "New-FoundryTool + New-FoundryChat -Tools -ToolChoice",
+      "Status": "Fail",
+      "Regression": false,
+      "Differences": [],
+      "Error": "[FoundryApiRequestError,Invoke-FoundryApiRequest] Foundry API request failed (POST http://localhost:60288/v1/chat/completions): Response status code does not indicate success: 404 (Not Found). Server response: { \"error\": { \"code\": null, \"message\": \"Model not found: No model matching \\u0027qwen2.5-0.5b-instruct-generic-cpu\\u0027\", \"param\": null, \"type\": \"invalid_request_error\" } }",
+      "DurationMs": 4219,
+      "Observation": null,
+      "Info": {}
+    },
+    {
+      "Feature": "ChatErrors",
+      "Command": "New-FoundryChat (unknown model, bad ToolChoice, bad log path)",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 2122,
+      "Observation": {
+        "UnknownModel": "FoundryModelNotFound",
+        "InvalidToolChoice": "FoundryInvalidToolChoice",
+        "InvalidLogPath": "FoundryInvalidLogFilePath"
+      },
+      "Info": {}
+    },
+    {
+      "Feature": "ChatLogFile",
+      "Command": "New-FoundryChat -LogFilePath",
+      "Status": "Fail",
+      "Regression": false,
+      "Differences": [],
+      "Error": "Assertion failed: the chat log file 'C:\\Users\\olivi\\AppData\\Local\\Temp\\PwshFoundryCompat_20261103195222\\chat-log.jsonl' was written",
+      "DurationMs": 3,
+      "Observation": null,
+      "Info": {}
+    },
+    {
+      "Feature": "EmbeddingSingle",
+      "Command": "New-FoundryEmbedding -Text",
+      "Status": "Fail",
+      "Regression": false,
+      "Differences": [],
+      "Error": "[FoundryApiRequestError,Invoke-FoundryApiRequest] Foundry API request failed (GET http://localhost:60288/models/load/qwen3-embedding-0.6b-generic-gpu): Response status code does not indicate success: 404 (Not Found). Server response: { \"error\": { \"code\": null, \"message\": \"Model not found: No model matching \\u0027qwen3-embedding-0.6b-generic-gpu\\u0027\", \"param\": null, \"type\": \"invalid_request_error\" } }",
+      "DurationMs": 4163,
+      "Observation": null,
+      "Info": {}
+    },
+    {
+      "Feature": "EmbeddingBatch",
+      "Command": "New-FoundryEmbedding (pipeline batch)",
+      "Status": "Fail",
+      "Regression": false,
+      "Differences": [],
+      "Error": "[FoundryApiRequestError,Invoke-FoundryApiRequest] Foundry API request failed (GET http://localhost:60288/models/load/qwen3-embedding-0.6b-generic-gpu): Response status code does not indicate success: 404 (Not Found). Server response: { \"error\": { \"code\": null, \"message\": \"Model not found: No model matching \\u0027qwen3-embedding-0.6b-generic-gpu\\u0027\", \"param\": null, \"type\": \"invalid_request_error\" } }",
+      "DurationMs": 4161,
+      "Observation": null,
+      "Info": {}
+    },
+    {
+      "Feature": "CompareEmbedding",
+      "Command": "Compare-FoundryEmbedding",
+      "Status": "Fail",
+      "Regression": false,
+      "Differences": [],
+      "Error": "Assertion failed: EmbeddingBatch produced vectors",
+      "DurationMs": 3,
+      "Observation": null,
+      "Info": {}
+    },
+    {
+      "Feature": "AudioText",
+      "Command": "New-FoundryAudioTranscription",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 4536,
+      "Observation": {
+        "ReturnType": "String",
+        "Trimmed": true
+      },
+      "Info": {
+        "Text": "And lots of times you need to give people more than one link at a time. You a band could give their fans a couple new vi..."
+      }
+    },
+    {
+      "Feature": "AudioJson",
+      "Command": "New-FoundryAudioTranscription -ResponseFormat json -Language",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 4554,
+      "Observation": {
+        "PropertyNames": [
+          "AudioFile",
+          "Id",
+          "Language",
+          "Model",
+          "Text"
+        ],
+        "Language": "en",
+        "HasId": true
+      },
+      "Info": {
+        "Model": "openai-whisper-tiny-generic-cpu:4"
+      }
+    },
+    {
+      "Feature": "AudioErrors",
+      "Command": "New-FoundryAudioTranscription (missing file, unknown model)",
+      "Status": "Pass",
+      "Regression": false,
+      "Differences": [],
+      "Error": null,
+      "DurationMs": 6,
+      "Observation": {
+        "MissingFile": "AudioFileNotFound",
+        "UnknownModel": "FoundryModelNotFound"
+      },
+      "Info": {}
+    },
+    {
+      "Feature": "WebServer",
+      "Command": "Start-FoundryWebServer + Stop-FoundryWebServer (SDK)",
+      "Status": "Skip",
+      "Regression": false,
+      "Differences": [],
+      "Error": "Opt-in: use -IncludeWebServer",
+      "DurationMs": 0,
+      "Observation": null,
+      "Info": null
+    }
+  ]
+}

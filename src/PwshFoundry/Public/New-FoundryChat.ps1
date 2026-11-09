@@ -129,18 +129,16 @@ function New-FoundryChat {
 
     $messages = if ($PSCmdlet.ParameterSetName -eq 'Context') { $Context.GetMessages() } else { $Message.GetMessages() }
 
-    # Since Foundry Local 0.10.0 the OpenAI-compatible chat endpoint no longer
-    # auto-loads models and returns 400 if the model is not loaded.
-    $loadedModels = @(Invoke-FoundryApiRequest -Action 'models-loaded' -Method GET)
-    $isLoaded = [bool]($loadedModels | Where-Object { $_ -eq $Model -or $_ -like "${Model}:*" })
-
-    if (-not $isLoaded) {
-        Write-Verbose "Model '$Model' is not loaded; loading it now (this can take a while)."
-        $null = Invoke-FoundryApiRequest -Action 'model-load' -Method GET -PathParameters @{ name = $Model }
+    # The chat endpoint does not auto-load models and expects the versioned id of a loaded model.
+    try {
+        $resolvedModel = Initialize-FoundryModel -Name $Model -ErrorAction Stop
+    }
+    catch {
+        $PSCmdlet.ThrowTerminatingError($_)
     }
 
     $body = @{
-        model    = $Model
+        model    = $resolvedModel ?? $Model
         messages = $messages
     }
 
@@ -192,7 +190,12 @@ function New-FoundryChat {
 
     Write-Verbose "Request body: $($body | ConvertTo-Json -Depth 10)"
 
-    $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body
+    try {
+        $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body -ErrorAction Stop
+    }
+    catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
 
     if ($PSBoundParameters.ContainsKey('Tools')) {
         $round = 0
@@ -246,7 +249,12 @@ function New-FoundryChat {
             }
 
             Write-Verbose "Tool round ${round}: re-sending request with $($toolCalls.Count) tool result(s)."
-            $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body
+            try {
+                $chat = Invoke-FoundryApiRequest -Action 'chat' -Method POST -Body $body -ErrorAction Stop
+            }
+            catch {
+                $PSCmdlet.ThrowTerminatingError($_)
+            }
         }
     }
 

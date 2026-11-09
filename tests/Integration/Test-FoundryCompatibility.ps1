@@ -29,7 +29,7 @@
       - Skip : a prerequisite is missing (model not in the catalog, opt-in test not requested)
 .PARAMETER ChatModel
     Chat model id used for chat, tool calling and model management tests. Must support tool
-    calling. Defaults to the first cached model of: qwen2.5-0.5b, phi-4-mini, then any
+    calling. Defaults to the first cached model of: qwen3-0.6b, phi-4-mini, then any
     cached chat model that supports tool calling.
 .PARAMETER EmbeddingModel
     Embedding model id. Defaults to qwen3-embedding-0.6b, then any cached embedding model.
@@ -782,7 +782,7 @@ try {
 }
 
 $script:State.ChatModel = Select-CatalogModel -Catalog $catalog -Requested $ChatModel `
-    -Preferred 'qwen2.5-0.5b', 'phi-4-mini' -Fallback { $_.type -eq 'Chat' -and $_.supportsToolCalling }
+    -Preferred 'qwen3-0.6b', 'phi-4-mini' -Fallback { $_.type -eq 'Chat' -and $_.supportsToolCalling }
 $script:State.EmbeddingModel = Select-CatalogModel -Catalog $catalog -Requested $EmbeddingModel `
     -Preferred 'qwen3-embedding-0.6b' -Fallback { $_.type -eq 'Embedding' }
 $script:State.AudioModel = Select-CatalogModel -Catalog $catalog -Requested $AudioModel `
