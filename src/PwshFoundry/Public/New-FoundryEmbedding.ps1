@@ -60,24 +60,22 @@ function New-FoundryEmbedding {
     }
 
     end {
-        # Since Foundry Local 0.10.0 the OpenAI-compatible endpoints no longer
-        # auto-load models and return 400 if the model is not loaded.
-        $loadedModels = @(Invoke-FoundryApiRequest -Action 'models-loaded' -Method GET)
-        $isLoaded = [bool]($loadedModels | Where-Object { $_ -eq $Model -or $_ -like "${Model}:*" })
+        # The embeddings endpoint does not auto-load models and expects the versioned id of a loaded model.
+        try {
+            $resolvedModel = (Initialize-FoundryModel -Name $Model -ErrorAction Stop) ?? $Model
 
-        if (-not $isLoaded) {
-            Write-Verbose "Model '$Model' is not loaded; loading it now (this can take a while)."
-            $null = Invoke-FoundryApiRequest -Action 'model-load' -Method GET -PathParameters @{ name = $Model }
+            $body = @{
+                model = $resolvedModel
+                input = @($allText)
+            }
+
+            Write-Verbose "Requesting embeddings for $($allText.Count) text(s) with model '$resolvedModel'."
+
+            $response = Invoke-FoundryApiRequest -Action 'embeddings' -Method POST -Body $body -ErrorAction Stop
         }
-
-        $body = @{
-            model = $Model
-            input = @($allText)
+        catch {
+            $PSCmdlet.ThrowTerminatingError($_)
         }
-
-        Write-Verbose "Requesting embeddings for $($allText.Count) text(s) with model '$Model'."
-
-        $response = Invoke-FoundryApiRequest -Action 'embeddings' -Method POST -Body $body
 
         foreach ($entry in ($response.data | Sort-Object -Property index)) {
             [PSCustomObject]@{
